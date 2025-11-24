@@ -4,7 +4,7 @@ import shutil
 from app.core.celery_app import celery_app
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
-from app.models.settings import SettingsModel
+from app.models.subscription import Subscription
 from app.models.sync_state import SyncState, SyncStatus, SyncType
 from app.models.selection import SelectedCategory
 from app.models.cache import MovieCache, SeriesCache, EpisodeCache
@@ -12,23 +12,20 @@ from app.models.schedule import Schedule, SyncType as ScheduleSyncType
 from app.models.schedule_execution import ScheduleExecution, ExecutionStatus
 from app.services.xtream import XtreamClient
 from app.services.file_manager import FileManager
-from app.core.config import settings as app_settings
 import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def get_settings_from_db(db: Session):
-    settings_dict = {}
-    for s in db.query(SettingsModel).all():
-        settings_dict[s.key] = s.value
-    return settings_dict
-
-async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
+async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscription_id: int):
     # Update status
-    sync_state = db.query(SyncState).filter(SyncState.type == SyncType.MOVIES).first()
+    sync_state = db.query(SyncState).filter(
+        SyncState.subscription_id == subscription_id,
+        SyncState.type == SyncType.MOVIES
+    ).first()
+    
     if not sync_state:
-        sync_state = SyncState(type=SyncType.MOVIES)
+        sync_state = SyncState(subscription_id=subscription_id, type=SyncType.MOVIES)
         db.add(sync_state)
     
     sync_state.status = SyncStatus.RUNNING
@@ -40,19 +37,21 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
         categories = await xc.get_vod_categories()
         cat_map = {c['category_id']: c['category_name'] for c in categories}
 
-        # Fetch All Movies (or filtered, but let's fetch all for now as per script logic)
-        # Note: Script logic supports filtering. We should implement that if settings allow.
-        # For now, assuming all.
+        # Fetch All Movies
         all_movies = await xc.get_vod_streams()
 
         # Filter by selected categories if any
-        selected_cats = db.query(SelectedCategory).filter(SelectedCategory.type == "movie").all()
+        selected_cats = db.query(SelectedCategory).filter(
+            SelectedCategory.subscription_id == subscription_id,
+            SelectedCategory.type == "movie"
+        ).all()
+        
         if selected_cats:
             selected_ids = {s.category_id for s in selected_cats}
             all_movies = [m for m in all_movies if m['category_id'] in selected_ids]
         
         # Current Cache
-        cached_movies = {m.stream_id: m for m in db.query(MovieCache).all()}
+        cached_movies = {m.stream_id: m for m in db.query(MovieCache).filter(MovieCache.subscription_id == subscription_id).all()}
         
         to_add_update = []
         to_delete = []
@@ -68,8 +67,6 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
             if not cached:
                 to_add_update.append(movie)
             else:
-                # Simple change detection (name or container)
-                # In a real scenario, we might want more robust checking
                 if cached.name != movie['name'] or cached.container_extension != movie['container_extension']:
                     to_add_update.append(movie)
 
@@ -99,7 +96,7 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
             name = movie['name']
             ext = movie['container_extension']
             cat_id = movie['category_id']
-            tmdb_id = movie.get('tmdb_id') # Might be None or string "null"
+            tmdb_id = movie.get('tmdb_id')
 
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
@@ -121,7 +118,7 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
             # Update Cache
             cached = cached_movies.get(stream_id)
             if not cached:
-                cached = MovieCache(stream_id=stream_id)
+                cached = MovieCache(subscription_id=subscription_id, stream_id=stream_id)
                 db.add(cached)
             
             cached.name = name
@@ -129,8 +126,7 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
             cached.container_extension = ext
             cached.tmdb_id = str(tmdb_id) if tmdb_id else None
 
-        # IMPORTANT: Create missing NFO files for movies already in cache
-        # This ensures all movies get NFO files even if they haven't changed
+        # Check for missing NFO files
         logger.info(f"Checking for missing NFO files across {len(all_movies)} movies...")
         nfo_created_count = 0
         for movie in all_movies:
@@ -144,9 +140,7 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
             
             nfo_path = f"{fm.output_dir}/{safe_cat}/{safe_name}.nfo"
             
-            # Check if NFO file exists
             if not os.path.exists(nfo_path):
-                # Create the NFO file
                 cat_dir = f"{fm.output_dir}/{safe_cat}"
                 fm.ensure_directory(cat_dir)
                 nfo_content = fm.generate_movie_nfo(movie)
@@ -155,9 +149,6 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
         
         if nfo_created_count > 0:
             logger.info(f"Created {nfo_created_count} missing NFO files")
-            
-            # Commit periodically or at end? 
-            # For large datasets, maybe batch commit. For now, let's commit at end.
 
         sync_state.items_added = len(to_add_update)
         sync_state.items_deleted = len(to_delete)
@@ -171,11 +162,15 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager):
         db.commit()
         raise
 
-async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
+async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscription_id: int):
     # Update status
-    sync_state = db.query(SyncState).filter(SyncState.type == SyncType.SERIES).first()
+    sync_state = db.query(SyncState).filter(
+        SyncState.subscription_id == subscription_id,
+        SyncState.type == SyncType.SERIES
+    ).first()
+    
     if not sync_state:
-        sync_state = SyncState(type=SyncType.SERIES)
+        sync_state = SyncState(subscription_id=subscription_id, type=SyncType.SERIES)
         db.add(sync_state)
     
     sync_state.status = SyncStatus.RUNNING
@@ -189,11 +184,16 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
         all_series = await xc.get_series()
 
         # Filter by selected categories if any
-        selected_cats = db.query(SelectedCategory).filter(SelectedCategory.type == "series").all()
+        selected_cats = db.query(SelectedCategory).filter(
+            SelectedCategory.subscription_id == subscription_id,
+            SelectedCategory.type == "series"
+        ).all()
+        
         if selected_cats:
             selected_ids = {s.category_id for s in selected_cats}
             all_series = [s for s in all_series if s['category_id'] in selected_ids]
-        cached_series = {s.series_id: s for s in db.query(SeriesCache).all()}
+        
+        cached_series = {s.series_id: s for s in db.query(SeriesCache).filter(SeriesCache.subscription_id == subscription_id).all()}
         
         to_add_update = []
         to_delete = []
@@ -207,10 +207,6 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
             if not cached:
                 to_add_update.append(series)
             else:
-                # For series, we might want to check if episodes changed.
-                # But typically, if series info changes or we just want to re-sync.
-                # The script logic compares series_id presence.
-                # We'll stick to basic existence + name change for now.
                 if cached.name != series['name']:
                     to_add_update.append(series)
 
@@ -225,11 +221,6 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
             safe_name = fm.sanitize_name(series.name)
             
             path = f"{fm.output_dir}/{safe_cat}/{safe_name}"
-            # Recursive delete is dangerous, but FileManager doesn't have it.
-            # We should probably implement a safe recursive delete or just rely on OS.
-            # For now, let's assume we can use shutil in FileManager or just os.system
-            # But wait, FileManager only has delete_file.
-            # Let's just delete the directory using os (carefully)
             if os.path.exists(path):
                 shutil.rmtree(path)
             
@@ -250,24 +241,13 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
             series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}"
             fm.ensure_directory(series_dir)
             
-            # Always create tvshow.nfo with all available metadata
+            # Always create tvshow.nfo
             nfo_path = f"{series_dir}/tvshow.nfo"
             await fm.write_nfo(nfo_path, fm.generate_show_nfo(series))
 
             # Fetch Episodes
             info = await xc.get_series_info(str(series_id))
             episodes_data = info.get('episodes', {})
-            
-            # Handle if episodes is a list or dict (API varies)
-            if isinstance(episodes_data, dict):
-                # It's usually a dict of "1": [episodes], "2": [episodes] (Seasons)
-                pass
-            elif isinstance(episodes_data, list):
-                # Sometimes it's a list?
-                pass
-
-            # The script logic: jq -c '.episodes // {} | to_entries[]'
-            # So it expects a dict where keys are season numbers.
             
             for season_key, episodes in episodes_data.items():
                 season_num = int(season_key)
@@ -280,7 +260,6 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
                     container = ep['container_extension']
                     title = ep.get('title', '')
                     
-                    # Format: S01E01 - Title
                     formatted_ep = f"S{season_num:02d}E{ep_num:02d}"
                     if title:
                         safe_title = fm.sanitize_name(title)
@@ -295,15 +274,14 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
             # Update Cache
             cached = cached_series.get(series_id)
             if not cached:
-                cached = SeriesCache(series_id=series_id)
+                cached = SeriesCache(subscription_id=subscription_id, series_id=series_id)
                 db.add(cached)
             
             cached.name = name
             cached.category_id = cat_id
             cached.tmdb_id = str(tmdb_id) if tmdb_id else None
 
-        # IMPORTANT: Create missing NFO files for series already processed
-        # This ensures all series get NFO files even if they haven't changed
+        # Check for missing NFO files
         logger.info(f"Checking for missing series NFO files across {len(to_add_update)} series...")
         nfo_created_count = 0
         for series in to_add_update:
@@ -318,7 +296,6 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
             series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}"
             tvshow_nfo_path = f"{series_dir}/tvshow.nfo"
             
-            # Check if tvshow.nfo exists
             if os.path.exists(series_dir) and not os.path.exists(tvshow_nfo_path):
                 await fm.write_nfo(tvshow_nfo_path, fm.generate_show_nfo(series))
                 nfo_created_count += 1
@@ -339,57 +316,44 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager):
         raise
 
 @celery_app.task
-def sync_movies_task():
+def sync_movies_task(subscription_id: int):
     db = SessionLocal()
     try:
-        settings_dict = get_settings_from_db(db)
-        # Fallback to env vars if DB empty
-        url = settings_dict.get("XC_URL") or app_settings.XC_URL
-        user = settings_dict.get("XC_USER") or app_settings.XC_USER
-        password = settings_dict.get("XC_PASS") or app_settings.XC_PASS
+        sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+        if not sub:
+            logger.error(f"Subscription {subscription_id} not found")
+            return "Subscription not found"
         
-        # Use MOVIES_DIR with fallback to OUTPUT_DIR/movies
-        movies_dir = settings_dict.get("MOVIES_DIR") or app_settings.MOVIES_DIR
-        if not movies_dir:
-            output_dir = settings_dict.get("OUTPUT_DIR") or app_settings.OUTPUT_DIR
-            movies_dir = f"{output_dir}/movies"
+        if not sub.is_active:
+            logger.info(f"Subscription {sub.name} is inactive")
+            return "Subscription inactive"
 
-        if not (url and user and password):
-            logger.error("Missing Xtream credentials")
-            return "Missing credentials"
-
-        xc = XtreamClient(url, user, password)
-        fm = FileManager(movies_dir)
+        xc = XtreamClient(sub.xtream_url, sub.username, sub.password)
+        fm = FileManager(sub.movies_dir)
         
-        asyncio.run(process_movies(db, xc, fm))
-        return "Movies synced successfully"
+        asyncio.run(process_movies(db, xc, fm, subscription_id))
+        return f"Movies synced successfully for {sub.name}"
     finally:
         db.close()
 
 @celery_app.task
-def sync_series_task():
+def sync_series_task(subscription_id: int):
     db = SessionLocal()
     try:
-        settings_dict = get_settings_from_db(db)
-        url = settings_dict.get("XC_URL") or app_settings.XC_URL
-        user = settings_dict.get("XC_USER") or app_settings.XC_USER
-        password = settings_dict.get("XC_PASS") or app_settings.XC_PASS
+        sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+        if not sub:
+            logger.error(f"Subscription {subscription_id} not found")
+            return "Subscription not found"
         
-        # Use SERIES_DIR with fallback to OUTPUT_DIR/series
-        series_dir = settings_dict.get("SERIES_DIR") or app_settings.SERIES_DIR
-        if not series_dir:
-            output_dir = settings_dict.get("OUTPUT_DIR") or app_settings.OUTPUT_DIR
-            series_dir = f"{output_dir}/series"
+        if not sub.is_active:
+            logger.info(f"Subscription {sub.name} is inactive")
+            return "Subscription inactive"
 
-        if not (url and user and password):
-            logger.error("Missing Xtream credentials")
-            return "Missing credentials"
-
-        xc = XtreamClient(url, user, password)
-        fm = FileManager(series_dir)
+        xc = XtreamClient(sub.xtream_url, sub.username, sub.password)
+        fm = FileManager(sub.series_dir)
         
-        asyncio.run(process_series(db, xc, fm))
-        return "Series synced successfully"
+        asyncio.run(process_series(db, xc, fm, subscription_id))
+        return f"Series synced successfully for {sub.name}"
     finally:
         db.close()
 
@@ -417,9 +381,9 @@ def check_schedules_task():
             try:
                 # Trigger appropriate sync
                 if schedule.type == ScheduleSyncType.MOVIES:
-                    result = sync_movies_task.apply_async()
+                    result = sync_movies_task.apply_async(args=[schedule.subscription_id])
                 else:
-                    result = sync_series_task.apply_async()
+                    result = sync_series_task.apply_async(args=[schedule.subscription_id])
                 
                 # Update execution status
                 execution.status = ExecutionStatus.SUCCESS
@@ -427,6 +391,7 @@ def check_schedules_task():
                 
                 # Get items processed from sync state
                 sync_state = db.query(SyncState).filter(
+                    SyncState.subscription_id == schedule.subscription_id,
                     SyncState.type == (SyncType.MOVIES if schedule.type == ScheduleSyncType.MOVIES else SyncType.SERIES)
                 ).first()
                 if sync_state:

@@ -10,7 +10,7 @@ services:
       - "80:8000"
     volumes:
       - ./output:/output
-      - ./db:/app/db
+      - ./db:/db
       - ./app.log:/app/app.log
     restart: unless-stopped
     environment:

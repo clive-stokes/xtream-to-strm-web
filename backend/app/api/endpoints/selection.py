@@ -5,27 +5,35 @@ from datetime import datetime
 from app.db.session import get_db
 from app.models.selection import SelectedCategory
 from app.models.category import Category
-from app.models.settings import SettingsModel
+from app.models.subscription import Subscription
 from app.schemas import CategoryResponse, SelectionUpdate, SyncResponse
 from app.api import deps
 from app.services.xtream import XtreamClient
 
 router = APIRouter()
 
-def get_xtream_client(db: Session) -> XtreamClient:
-    settings = {s.key: s.value for s in db.query(SettingsModel).all()}
-    if not settings.get("XC_URL") or not settings.get("XC_USER") or not settings.get("XC_PASS"):
-        raise HTTPException(status_code=400, detail="Xtream Codes configuration missing")
-    return XtreamClient(settings["XC_URL"], settings["XC_USER"], settings["XC_PASS"])
+def get_xtream_client(db: Session, subscription_id: int) -> XtreamClient:
+    sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    if not sub.is_active:
+        raise HTTPException(status_code=400, detail="Subscription is inactive")
+    return XtreamClient(sub.xtream_url, sub.username, sub.password)
 
-@router.get("/movies", response_model=List[CategoryResponse])
-def get_movie_categories(db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+@router.get("/movies/{subscription_id}", response_model=List[CategoryResponse])
+def get_movie_categories(subscription_id: int, db: Session = Depends(get_db)):
     """Get movie categories from database"""
     # Get all categories from database
-    categories = db.query(Category).filter(Category.type == "movie").all()
+    categories = db.query(Category).filter(
+        Category.subscription_id == subscription_id,
+        Category.type == "movie"
+    ).all()
     
     # Get selected categories
-    selected = db.query(SelectedCategory).filter(SelectedCategory.type == "movie").all()
+    selected = db.query(SelectedCategory).filter(
+        SelectedCategory.subscription_id == subscription_id,
+        SelectedCategory.type == "movie"
+    ).all()
     selected_ids = {s.category_id for s in selected}
 
     return [
@@ -37,14 +45,20 @@ def get_movie_categories(db: Session = Depends(get_db), current_user = Depends(d
         for cat in categories
     ]
 
-@router.get("/series", response_model=List[CategoryResponse])
-def get_series_categories(db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+@router.get("/series/{subscription_id}", response_model=List[CategoryResponse])
+def get_series_categories(subscription_id: int, db: Session = Depends(get_db)):
     """Get series categories from database"""
     # Get all categories from database
-    categories = db.query(Category).filter(Category.type == "series").all()
+    categories = db.query(Category).filter(
+        Category.subscription_id == subscription_id,
+        Category.type == "series"
+    ).all()
     
     # Get selected categories
-    selected = db.query(SelectedCategory).filter(SelectedCategory.type == "series").all()
+    selected = db.query(SelectedCategory).filter(
+        SelectedCategory.subscription_id == subscription_id,
+        SelectedCategory.type == "series"
+    ).all()
     selected_ids = {s.category_id for s in selected}
 
     return [
@@ -56,22 +70,26 @@ def get_series_categories(db: Session = Depends(get_db), current_user = Depends(
         for cat in categories
     ]
 
-@router.post("/movies/sync", response_model=SyncResponse)
-async def sync_movie_categories(db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+@router.post("/movies/sync/{subscription_id}", response_model=SyncResponse)
+async def sync_movie_categories(subscription_id: int, db: Session = Depends(get_db)):
     """Sync movie categories from Xtream to database"""
-    client = get_xtream_client(db)
+    client = get_xtream_client(db, subscription_id)
     try:
         categories = await client.get_vod_categories()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch from Xtream: {str(e)}")
 
-    # Clear existing movie categories
-    db.query(Category).filter(Category.type == "movie").delete()
+    # Clear existing movie categories for this subscription
+    db.query(Category).filter(
+        Category.subscription_id == subscription_id,
+        Category.type == "movie"
+    ).delete()
     
     # Add new categories
     now = datetime.utcnow()
     for cat in categories:
         db.add(Category(
+            subscription_id=subscription_id,
             category_id=str(cat["category_id"]),
             category_name=cat["category_name"],
             type="movie",
@@ -85,22 +103,26 @@ async def sync_movie_categories(db: Session = Depends(get_db), current_user = De
         timestamp=now
     )
 
-@router.post("/series/sync", response_model=SyncResponse)
-async def sync_series_categories(db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+@router.post("/series/sync/{subscription_id}", response_model=SyncResponse)
+async def sync_series_categories(subscription_id: int, db: Session = Depends(get_db)):
     """Sync series categories from Xtream to database"""
-    client = get_xtream_client(db)
+    client = get_xtream_client(db, subscription_id)
     try:
         categories = await client.get_series_categories()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch from Xtream: {str(e)}")
 
-    # Clear existing series categories
-    db.query(Category).filter(Category.type == "series").delete()
+    # Clear existing series categories for this subscription
+    db.query(Category).filter(
+        Category.subscription_id == subscription_id,
+        Category.type == "series"
+    ).delete()
     
     # Add new categories
     now = datetime.utcnow()
     for cat in categories:
         db.add(Category(
+            subscription_id=subscription_id,
             category_id=str(cat["category_id"]),
             category_name=cat["category_name"],
             type="series",
@@ -114,15 +136,19 @@ async def sync_series_categories(db: Session = Depends(get_db), current_user = D
         timestamp=now
     )
 
-@router.post("/movies", response_model=List[CategoryResponse])
-def update_movie_selection(selection: SelectionUpdate, db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+@router.post("/movies/{subscription_id}", response_model=List[CategoryResponse])
+def update_movie_selection(subscription_id: int, selection: SelectionUpdate, db: Session = Depends(get_db)):
     """Update movie category selection"""
-    # Clear existing selection
-    db.query(SelectedCategory).filter(SelectedCategory.type == "movie").delete()
+    # Clear existing selection for this subscription
+    db.query(SelectedCategory).filter(
+        SelectedCategory.subscription_id == subscription_id,
+        SelectedCategory.type == "movie"
+    ).delete()
     
     # Add new selection
     for cat in selection.categories:
         db.add(SelectedCategory(
+            subscription_id=subscription_id,
             category_id=cat.category_id,
             name=cat.category_name,
             type="movie"
@@ -131,15 +157,19 @@ def update_movie_selection(selection: SelectionUpdate, db: Session = Depends(get
     
     return [CategoryResponse(category_id=c.category_id, category_name=c.category_name, selected=True) for c in selection.categories]
 
-@router.post("/series", response_model=List[CategoryResponse])
-def update_series_selection(selection: SelectionUpdate, db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+@router.post("/series/{subscription_id}", response_model=List[CategoryResponse])
+def update_series_selection(subscription_id: int, selection: SelectionUpdate, db: Session = Depends(get_db)):
     """Update series category selection"""
-    # Clear existing selection
-    db.query(SelectedCategory).filter(SelectedCategory.type == "series").delete()
+    # Clear existing selection for this subscription
+    db.query(SelectedCategory).filter(
+        SelectedCategory.subscription_id == subscription_id,
+        SelectedCategory.type == "series"
+    ).delete()
     
     # Add new selection
     for cat in selection.categories:
         db.add(SelectedCategory(
+            subscription_id=subscription_id,
             category_id=cat.category_id,
             name=cat.category_name,
             type="series"

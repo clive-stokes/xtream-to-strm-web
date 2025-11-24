@@ -7,13 +7,13 @@ from app.api import deps
 
 router = APIRouter()
 
-@router.get("/", response_model=ConfigResponse, dependencies=[Depends(deps.get_current_user)])
+@router.get("/", response_model=ConfigResponse)
 def get_config(db: Session = Depends(get_db)):
     settings = {s.key: s.value for s in db.query(SettingsModel).all()}
     return ConfigResponse(**settings)
 
 @router.post("/", response_model=ConfigResponse)
-def update_config(config: ConfigUpdate, db: Session = Depends(get_db), current_user = Depends(deps.get_current_user)):
+def update_config(config: ConfigUpdate, db: Session = Depends(get_db)):
     updates = {}
     if config.XC_URL is not None:
         updates["XC_URL"] = config.XC_URL

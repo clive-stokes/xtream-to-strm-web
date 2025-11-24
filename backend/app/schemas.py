@@ -19,6 +19,8 @@ class ConfigResponse(BaseModel):
     SERIES_DIR: Optional[str] = None
 
 class SyncStatusResponse(BaseModel):
+    id: Optional[int] = None
+    subscription_id: int
     type: str
     last_sync: Optional[datetime]
     status: str
@@ -43,4 +45,31 @@ class SelectionUpdate(BaseModel):
 class SyncResponse(BaseModel):
     categories_synced: int
     timestamp: datetime
+
+class SubscriptionBase(BaseModel):
+    name: str
+    xtream_url: str
+    username: str
+    password: str
+    movies_dir: str
+    series_dir: str
+    is_active: bool = True
+
+class SubscriptionCreate(SubscriptionBase):
+    pass
+
+class SubscriptionUpdate(BaseModel):
+    name: Optional[str] = None
+    xtream_url: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    movies_dir: Optional[str] = None
+    series_dir: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class SubscriptionResponse(SubscriptionBase):
+    id: int
+
+    class Config:
+        from_attributes = True
 

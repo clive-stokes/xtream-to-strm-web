@@ -1,13 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Film, Tv, RefreshCw, AlertCircle, CheckCircle2, RotateCcw, StopCircle, List } from 'lucide-react';
+import { Film, Tv, RefreshCw, AlertCircle, CheckCircle2, StopCircle } from 'lucide-react';
 import api from '@/lib/api';
 
+interface Subscription {
+    id: number;
+    name: string;
+    xtream_url: string;
+    username: string;
+    password: string;
+    output_dir: string;
+    is_active: boolean;
+}
+
 interface SyncStatus {
+    id: number;
+    subscription_id: number;
     type: string;
-    last_sync: string;
+    last_sync: string | null;
     status: string;
     items_added: number;
     items_deleted: number;
@@ -15,29 +26,34 @@ interface SyncStatus {
 }
 
 export default function Dashboard() {
+    const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [statuses, setStatuses] = useState<SyncStatus[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const fetchStatus = async () => {
+    const fetchData = async () => {
         try {
-            const res = await api.get<SyncStatus[]>('/sync/status');
-            setStatuses(res.data);
+            const [subsRes, statusRes] = await Promise.all([
+                api.get<Subscription[]>('/subscriptions/'),
+                api.get<SyncStatus[]>('/sync/status')
+            ]);
+            setSubscriptions(subsRes.data);
+            setStatuses(statusRes.data);
         } catch (error) {
-            console.error("Failed to fetch status", error);
+            console.error("Failed to fetch data", error);
         }
     };
 
     useEffect(() => {
-        fetchStatus();
-        const interval = setInterval(fetchStatus, 5000);
+        fetchData();
+        const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
     }, []);
 
-    const triggerSync = async (type: 'movies' | 'series') => {
+    const triggerSync = async (subscriptionId: number, type: 'movies' | 'series') => {
         try {
             setLoading(true);
-            await api.post(`/sync/${type}`);
-            await fetchStatus();
+            await api.post(`/sync/${type}/${subscriptionId}`);
+            await fetchData();
         } catch (error) {
             console.error(`Failed to trigger ${type} sync`, error);
         } finally {
@@ -45,32 +61,19 @@ export default function Dashboard() {
         }
     };
 
-    const resetSyncHistory = async () => {
-        if (!window.confirm('Are you sure you want to reset sync history? This will clear all sync status records.')) {
-            return;
-        }
+    const stopSync = async (subscriptionId: number, type: 'movies' | 'series') => {
         try {
             setLoading(true);
-            await api.post('/sync/reset');
-            await fetchStatus();
-        } catch (error) {
-            console.error('Failed to reset sync history', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const stopSync = async (type: 'movies' | 'series') => {
-        try {
-            setLoading(true);
-            await api.post(`/sync/stop/${type}`);
-            await fetchStatus();
+            await api.post(`/sync/stop/${subscriptionId}/${type}`);
+            await fetchData();
         } catch (error) {
             console.error(`Failed to stop ${type} sync`, error);
         } finally {
             setLoading(false);
         }
     };
+
+
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -86,149 +89,173 @@ export default function Dashboard() {
             case 'success': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
             case 'failed': return <AlertCircle className="w-5 h-5 text-red-500" />;
             case 'running': return <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" />;
-            default: return <Activity className="w-5 h-5 text-muted-foreground" />;
+            default: return <div className="w-5 h-5 rounded-full bg-muted" />;
         }
     };
 
-    const movieStatus = statuses.find(s => s.type === 'movies');
-    const seriesStatus = statuses.find(s => s.type === 'series');
+    const getStatus = (subscriptionId: number, type: string) => {
+        return statuses.find(s => s.subscription_id === subscriptionId && s.type === type);
+    };
 
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-                    <p className="text-muted-foreground">Overview of your Xtream to STRM synchronization.</p>
+            <div>
+                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                <p className="text-muted-foreground">Monitor sync status for all subscriptions</p>
+            </div>
+
+            {subscriptions.length === 0 ? (
+                <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground">
+                        No subscriptions configured. Go to Configuration to add subscriptions.
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="space-y-4">
+                    {subscriptions.map(sub => {
+                        const movieStatus = getStatus(sub.id, 'movies');
+                        const seriesStatus = getStatus(sub.id, 'series');
+
+                        return (
+                            <Card key={sub.id}>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center justify-between">
+                                        <span>{sub.name}</span>
+                                        {!sub.is_active && (
+                                            <span className="text-sm font-normal text-muted-foreground">(Inactive)</span>
+                                        )}
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Movies */}
+                                        <div className="border rounded-lg p-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Film className="w-5 h-5 text-muted-foreground" />
+                                                    <span className="font-medium">Movies</span>
+                                                </div>
+                                                {getStatusIcon(movieStatus?.status || 'idle')}
+                                            </div>
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Status:</span>
+                                                    <span className={`font-medium capitalize ${getStatusColor(movieStatus?.status || 'idle')}`}>
+                                                        {movieStatus?.status || 'Idle'}
+                                                    </span>
+                                                </div>
+                                                {movieStatus?.last_sync && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-muted-foreground">Last Sync:</span>
+                                                        <span>{new Date(movieStatus.last_sync).toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {movieStatus && (
+                                                    <>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-muted-foreground">Added:</span>
+                                                            <span className="text-green-600">{movieStatus.items_added}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-muted-foreground">Deleted:</span>
+                                                            <span className="text-red-600">{movieStatus.items_deleted}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="mt-4">
+                                                {movieStatus?.status === 'running' ? (
+                                                    <Button
+                                                        onClick={() => stopSync(sub.id, 'movies')}
+                                                        disabled={loading || !sub.is_active}
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        className="w-full"
+                                                    >
+                                                        <StopCircle className="w-4 h-4 mr-2" />
+                                                        Stop Sync
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        onClick={() => triggerSync(sub.id, 'movies')}
+                                                        disabled={loading || !sub.is_active}
+                                                        size="sm"
+                                                        className="w-full"
+                                                    >
+                                                        <RefreshCw className="w-4 h-4 mr-2" />
+                                                        Sync Now
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Series */}
+                                        <div className="border rounded-lg p-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Tv className="w-5 h-5 text-muted-foreground" />
+                                                    <span className="font-medium">Series</span>
+                                                </div>
+                                                {getStatusIcon(seriesStatus?.status || 'idle')}
+                                            </div>
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Status:</span>
+                                                    <span className={`font-medium capitalize ${getStatusColor(seriesStatus?.status || 'idle')}`}>
+                                                        {seriesStatus?.status || 'Idle'}
+                                                    </span>
+                                                </div>
+                                                {seriesStatus?.last_sync && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-muted-foreground">Last Sync:</span>
+                                                        <span>{new Date(seriesStatus.last_sync).toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {seriesStatus && (
+                                                    <>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-muted-foreground">Added:</span>
+                                                            <span className="text-green-600">{seriesStatus.items_added}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-muted-foreground">Deleted:</span>
+                                                            <span className="text-red-600">{seriesStatus.items_deleted}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="mt-4">
+                                                {seriesStatus?.status === 'running' ? (
+                                                    <Button
+                                                        onClick={() => stopSync(sub.id, 'series')}
+                                                        disabled={loading || !sub.is_active}
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        className="w-full"
+                                                    >
+                                                        <StopCircle className="w-4 h-4 mr-2" />
+                                                        Stop Sync
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        onClick={() => triggerSync(sub.id, 'series')}
+                                                        disabled={loading || !sub.is_active}
+                                                        size="sm"
+                                                        className="w-full"
+                                                    >
+                                                        <RefreshCw className="w-4 h-4 mr-2" />
+                                                        Sync Now
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
                 </div>
-                <Button onClick={resetSyncHistory} variant="outline" disabled={loading}>
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Reset History
-                </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {/* Movies Card */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Movies Sync</CardTitle>
-                        <Film className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center justify-between mt-2">
-                            <div className="flex items-center gap-2">
-                                {getStatusIcon(movieStatus?.status || 'idle')}
-                                <span className={`text-2xl font-bold capitalize ${getStatusColor(movieStatus?.status || 'idle')}`}>
-                                    {movieStatus?.status || 'Idle'}
-                                </span>
-                            </div>
-                            <div className="flex gap-2">
-                                {movieStatus?.status === 'running' ? (
-                                    <Button
-                                        onClick={() => stopSync('movies')}
-                                        disabled={loading}
-                                        variant="destructive"
-                                        size="sm"
-                                    >
-                                        <StopCircle className="w-4 h-4 mr-2" />
-                                        Stop Sync
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        onClick={() => triggerSync('movies')}
-                                        disabled={loading || movieStatus?.status === 'running'}
-                                        size="sm"
-                                    >
-                                        <RefreshCw className="w-4 h-4 mr-2" />
-                                        Sync Now
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                            {movieStatus?.last_sync ? `Last synced: ${new Date(movieStatus.last_sync).toLocaleString()}` : 'Never synced'}
-                        </p>
-                        {movieStatus?.error_message && (
-                            <p className="text-xs text-red-500 mt-1 truncate" title={movieStatus.error_message}>
-                                Error: {movieStatus.error_message}
-                            </p>
-                        )}
-                        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                            <div className="bg-secondary p-2 rounded">
-                                <span className="block font-semibold text-primary">{movieStatus?.items_added || 0}</span>
-                                <span className="text-muted-foreground">Added/Updated</span>
-                            </div>
-                            <div className="bg-secondary p-2 rounded">
-                                <span className="block font-semibold text-primary">{movieStatus?.items_deleted || 0}</span>
-                                <span className="text-muted-foreground">Deleted</span>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Series Card */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Series Sync</CardTitle>
-                        <Tv className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center justify-between mt-2">
-                            <div className="flex items-center gap-2">
-                                {getStatusIcon(seriesStatus?.status || 'idle')}
-                                <span className={`text-2xl font-bold capitalize ${getStatusColor(seriesStatus?.status || 'idle')}`}>
-                                    {seriesStatus?.status || 'Idle'}
-                                </span>
-                            </div>
-                            <Button
-                                size="sm"
-                                onClick={() => triggerSync('series')}
-                                disabled={loading || seriesStatus?.status === 'running'}
-                            >
-                                {seriesStatus?.status === 'running' ? 'Syncing...' : 'Sync Now'}
-                            </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                            {seriesStatus?.last_sync ? `Last synced: ${new Date(seriesStatus.last_sync).toLocaleString()}` : 'Never synced'}
-                        </p>
-                        {seriesStatus?.error_message && (
-                            <p className="text-xs text-red-500 mt-1 truncate" title={seriesStatus.error_message}>
-                                Error: {seriesStatus.error_message}
-                            </p>
-                        )}
-                        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                            <div className="bg-secondary p-2 rounded">
-                                <span className="block font-semibold text-primary">{seriesStatus?.items_added || 0}</span>
-                                <span className="text-muted-foreground">Added/Updated</span>
-                            </div>
-                            <div className="bg-secondary p-2 rounded">
-                                <span className="block font-semibold text-primary">{seriesStatus?.items_deleted || 0}</span>
-                                <span className="text-muted-foreground">Deleted</span>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Selection Card */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Configuration</CardTitle>
-                        <List className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex flex-col gap-4 mt-2">
-                            <p className="text-xs text-muted-foreground">
-                                Manage which categories to synchronize for Movies and Series.
-                            </p>
-                            <Link to="/bouquets">
-                                <Button className="w-full">
-                                    <List className="w-4 h-4 mr-2" />
-                                    Select Categories
-                                </Button>
-                            </Link>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+            )}
         </div>
     );
 }

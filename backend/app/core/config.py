@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
-    DATABASE_URL: str = "sqlite:///./sql_app.db"
+    DATABASE_URL: str = "sqlite:////db/xtream.db"
     
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -1,304 +1,222 @@
-# Xtream to STRM Web
+# Xtream to STRM Web Application
 
-<div align="center">
+A modern web-based application for managing Xtream Codes IPTV subscriptions and generating STRM/NFO files compatible with Jellyfin and Kodi media servers.
 
-![Xtream to STRM](https://img.shields.io/badge/Xtream-to%20STRM-blue)
-![Docker](https://img.shields.io/badge/Docker-Ready-brightgreen)
-![Python](https://img.shields.io/badge/Python-3.12-blue)
-![React](https://img.shields.io/badge/React-18-61dafb)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+## 🌟 Features
 
-**Application web moderne pour convertir les flux Xtream Codes en fichiers STRM pour Jellyfin/Kodi**
+- **Multi-Subscription Support**: Manage multiple Xtream Codes subscriptions from a single interface
+- **Web-Based Configuration**: Modern, responsive UI for easy setup and management
+- **Automated Scheduling**: Schedule automatic synchronization at custom intervals
+- **Real-Time Monitoring**: Live sync status and progress tracking
+- **Bouquet Selection**: Choose specific categories/bouquets to sync for each subscription
+- **NFO File Generation**: Automatic creation of NFO metadata files for Jellyfin/Kodi
+- **Incremental Updates**: Efficient sync process that only updates changed content
+- **Comprehensive Logging**: Real-time log viewer for troubleshooting
 
-[Fonctionnalités](#-fonctionnalités) • [Installation](#-installation-rapide) • [Configuration](#-configuration) • [Utilisation](#-utilisation) • [Documentation](#-documentation)
+## 📸 Screenshots
 
-</div>
+### Dashboard
+Monitor sync status for all subscriptions with real-time updates.
 
----
+![Dashboard](screenshots/dashboard_page.png)
 
-## 📋 Vue d'ensemble
+### Configuration
+Manage your Xtream Codes subscriptions.
 
-Xtream to STRM Web est une application web complète qui automatise la conversion et la gestion de vos flux Xtream Codes en fichiers STRM compatibles avec Jellyfin et Kodi. Avec une interface moderne, des synchronisations planifiées et la génération automatique de métadonnées NFO, cette solution simplifie grandement la gestion de votre bibliothèque multimédia.
+![Configuration](screenshots/configuration_page.png)
 
-### ✨ Pourquoi cette application ?
+### Bouquet Selection
+Select specific categories/bouquets to sync for movies and series.
 
-- 🎯 **Interface Web Intuitive** - Gérez tout depuis votre navigateur
-- ⚡ **Synchronisation Intelligente** - Détection automatique des changements
-- 📅 **Planification** - Syncs automatiques (horaire, quotidien, hebdomadaire)
-- 📊 **Métadonnées Riches** - Génération NFO avec données TMDB et Xtream
-- 🎬 **Multi-format** - Support films et séries avec structure Jellyfin/Kodi
-- 🐳 **Docker Ready** - Déploiement en une commande
+![Bouquet Selection](screenshots/bouquet_selection_page.png)
 
-## 🚀 Fonctionnalités
+### Scheduler
+Configure automated sync schedules for each subscription.
 
-### Gestion des Synchronisations
-- ✅ **Sync Films & Séries** - Synchronisation complète de votre catalogue Xtream
-- ✅ **Détection Incrémentale** - Seuls les changements sont traités
-- ✅ **Sélection de Catégories** - Choisissez quelles catégories synchroniser
-- ✅ **Historique** - Suivi complet de toutes les synchronisations
-- ✅ **Arrêt à Chaud** - Annulez une sync en cours
+![Scheduler](screenshots/scheduler_page.png)
 
-### Planification Automatique
-- ⏰ **Fréquences Multiples** - Horaire, toutes les 6h, 12h, quotidien, hebdomadaire
-- 📈 **Historique d'Exécution** - Visualisez toutes les syncs planifiées
-- 🔄 **Activation Simple** - Toggle on/off pour chaque type de sync
-- 📊 **Statistiques** - Nombre d'éléments traités par exécution
+### Logs
+View real-time application logs for monitoring and troubleshooting.
 
-### Fichiers NFO Intelligents
-- 🎯 **TMDB Priority** - NFO minimal si TMDB ID présent (meilleur scraping)
-- 📝 **Fallback Complet** - Métadonnées Xtream si TMDB absent
-- 🎬 **Films** - Un .nfo par film avec titre, plot, note, casting, etc.
-- 📺 **Séries** - Un tvshow.nfo par série (pas de NFO par épisode)
+![Logs](screenshots/logs_page.png)
 
-### Interface Moderne
-- 🎨 **Dashboard** - Vue d'ensemble avec statuts en temps réel
-- 📝 **Logs Streaming** - Logs en direct avec SSE
-- ⚙️ **Configuration** - Gestion des credentials Xtream
-- 🎯 **Sélection Bouquets** - Interface pour choisir les catégories
-- 🔐 **Authentification** - Login sécurisé avec JWT
+## 🚀 Quick Start
 
-## 📦 Installation Rapide
+### Prerequisites
 
-### Prérequis
-- Docker et Docker Compose installés
-- Accès à un serveur Xtream Codes
+- Docker
+- Docker Compose
+- Minimum 2GB RAM
+- Xtream Codes API credentials
 
-### Option 1 : Docker Compose (Recommandé)
+### Installation
 
-```bash
-# Cloner le repository
-git clone https://github.com/VOTRE_USERNAME/xtream_to_strm_web.git
-cd xtream_to_strm_web
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/xtream-to-strm-web.git
+   cd xtream-to-strm-web
+   ```
 
-# Lancer l'application
-docker-compose up -d
+2. **Start the application**
+   ```bash
+   sudo docker-compose up -d --build
+   ```
 
-# L'application est accessible sur http://localhost
-```
+3. **Access the web interface**
+   
+   Open your browser and navigate to: `http://localhost`
+   
+   Default credentials:
+   - Username: `admin`
+   - Password: `admin`
 
-### Option 2 : Docker Build
-
-```bash
-# Cloner et construire
-git clone https://github.com/VOTRE_USERNAME/xtream_to_strm_web.git
-cd xtream_to_strm_web
-
-# Build l'image
-docker build -f Dockerfile.single -t xtream_to_strm_web-app .
-
-# Lancer le conteneur
-docker run -d \
-  --name xtream_app \
-  -p 80:8000 \
-  -v $(pwd)/output:/output \
-  -v $(pwd)/db:/app/db \
-  xtream_to_strm_web-app
-```
+   ⚠️ **Important**: Change the default credentials in production!
 
 ## ⚙️ Configuration
 
-### Première Utilisation
+### Adding a Subscription
 
-1. **Accédez à l'interface** : http://localhost
-2. **Connectez-vous** :
-   - Username: `admin`
-   - Password: `admin`
-   - ⚠️ **Changez ces identifiants** après la première connexion
+1. Navigate to the **Configuration** page
+2. Click "Add Subscription"
+3. Fill in the required fields:
+   - **Name**: A friendly name for your subscription
+   - **Xtream URL**: Your Xtream Codes server URL
+   - **Username**: Your Xtream Codes username
+   - **Password**: Your Xtream Codes password
+   - **Output Directory**: Path where STRM files will be generated (default: `/output`)
+4. Click "Save"
 
-3. **Configurez Xtream Codes** :
-   - Allez dans `Configuration`
-   - Entrez votre URL, Username et Password Xtream
-   - Cliquez sur `Save Configuration`
+### Selecting Bouquets
 
-4. **Sélectionnez vos catégories** :
-   - Allez dans `Sélection Bouquets`
-   - Cliquez sur `List Categories`
-   - Cochez les catégories à synchroniser
-   - Sauvegardez
+1. Navigate to the **Bouquet Selection** page
+2. Select a subscription from the dropdown
+3. Click "List Categories" to fetch available categories
+4. Select the categories you want to sync for movies and/or series
+5. Click "Save Selection"
 
-5. **Première synchronisation** :
-   - Retournez au `Dashboard`
-   - Cliquez sur `Sync Now` pour Films et/ou Séries
+### Scheduling Automatic Syncs
 
-### Volumes Docker
+1. Navigate to the **Scheduler** page
+2. Select a subscription
+3. Choose sync type (Movies or Series)
+4. Set the interval (in hours)
+5. Click "Create Schedule"
 
-Les volumes importants à monter :
-
-```yaml
-volumes:
-  - ./output:/output      # Fichiers STRM et NFO générés
-  - ./db:/app/db          # Base de données SQLite
-```
-
-## 📖 Utilisation
-
-### Synchronisation Manuelle
-
-**Dashboard** → Cliquez sur `Sync Now` pour Movies ou Series
-
-Les fichiers sont créés dans `./output/` :
-```
-output/
-├── movies/
-│   └── Category_Name/
-│       ├── Movie_Name.strm
-│       └── Movie_Name.nfo
-└── series/
-    └── Category_Name/
-        └── Series_Name/
-            ├── tvshow.nfo
-            └── Season 1/
-                ├── S01E01 - Title.strm
-                ├── S01E02 - Title.strm
-                └── ...
-```
-
-### Synchronisation Planifiée
-
-**Planification** → Activez et configurez la fréquence
-
-- Toggle `Activé` pour Films et/ou Séries
-- Choisissez la fréquence (horaire, 6h, 12h, quotidien, hebdomadaire)
-- Le système synchronise automatiquement selon le planning
-
-### Intégration Jellyfin/Kodi
-
-1. **Pointez vers le dossier output** :
-   - Dans Jellyfin/Kodi, ajoutez `./output/movies` comme bibliothèque Films
-   - Ajoutez `./output/series` comme bibliothèque Séries
-
-2. **Configuration NFO** :
-   - Activez "NFO local" dans les paramètres de la bibliothèque
-   - Les métadonnées seront automatiquement chargées depuis les .nfo
-
-3. **Scraping automatique** :
-   - Si TMDB ID présent dans le NFO → Jellyfin/Kodi enrichit automatiquement
-   - Sinon → Utilise les métadonnées Xtream du NFO
-
-## 🏗️ Architecture
-
-### Stack Technique
-
-**Backend:**
-- FastAPI (API REST)
-- Celery + Redis (Tâches asynchrones)
-- Celery Beat (Planification)
-- SQLAlchemy (ORM)
-- SQLite (Base de données)
-
-**Frontend:**
-- React 18 + TypeScript
-- TailwindCSS
-- Vite
-- Axios
-
-**Infrastructure:**
-- Docker (Conteneurisation)
-- Nginx (Reverse proxy dans Uvicorn)
-
-### Structure du Projet
+## 📁 Directory Structure
 
 ```
 xtream_to_strm_web/
-├── backend/
+├── backend/              # FastAPI backend
 │   ├── app/
-│   │   ├── api/endpoints/     # Routes API
-│   │   ├── core/              # Config, Security, Celery
-│   │   ├── db/                # Database session
-│   │   ├── models/            # SQLAlchemy models
-│   │   ├── services/          # Business logic
-│   │   ├── tasks/             # Celery tasks
-│   │   └── main.py
-│   ├── requirements.txt
-│   └── start.sh
-├── frontend/
+│   │   ├── api/         # API endpoints
+│   │   ├── models/      # Database models
+│   │   ├── services/    # Business logic
+│   │   └── tasks/       # Celery tasks
+│   └── requirements.txt
+├── frontend/            # React frontend
 │   ├── src/
-│   │   ├── components/ui/     # UI Components
-│   │   ├── lib/               # API client, utils
-│   │   ├── pages/             # React pages
-│   │   └── App.tsx
+│   │   ├── components/  # Reusable components
+│   │   └── pages/       # Page components
 │   └── package.json
-├── Dockerfile.single           # Multi-stage build
+├── db/                  # SQLite database (persistent)
+├── output/              # Generated STRM/NFO files (persistent)
 ├── docker-compose.yml
-├── docker_start.sh
-└── README.md
+└── Dockerfile.single
 ```
 
-## 🔧 Développement
+## 🔧 Technical Stack
 
-### Setup Local
+### Backend
+- **FastAPI**: Modern Python web framework
+- **SQLAlchemy**: ORM for database management
+- **Celery**: Distributed task queue for async operations
+- **Redis**: Message broker and result backend
+- **SQLite**: Lightweight database
 
-```bash
-# Backend
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+### Frontend
+- **React**: UI library
+- **TypeScript**: Type-safe JavaScript
+- **Vite**: Build tool
+- **Tailwind CSS**: Utility-first CSS framework
+- **shadcn/ui**: Component library
 
-# Démarrer Redis
-redis-server
+## 🐳 Docker Configuration
 
-# Démarrer l'application
-./start.sh
+The application runs in a single Docker container with:
+- FastAPI backend (port 8000)
+- React frontend (served as static files)
+- Redis server
+- Celery worker
+- Celery beat scheduler
 
-# Frontend
-cd frontend
-npm install
-npm run dev
+### Persistent Volumes
+
+- `./db:/db` - Database files
+- `./output:/output` - Generated STRM/NFO files
+- `./app.log:/app/app.log` - Application logs
+
+## 🔐 Security
+
+⚠️ **Important Security Notes**:
+
+1. **Change default credentials** immediately after first login
+2. **Use environment variables** for sensitive configuration
+3. **Restrict network access** if exposing to the internet
+4. **Keep Docker images updated** regularly
+
+To change admin credentials, modify `backend/app/core/config.py`:
+```python
+ADMIN_USER: str = "your_username"
+ADMIN_PASS: str = "your_secure_password"
 ```
 
-### Variables d'Environnement
+## 📝 Usage
 
-Configurables dans `backend/app/core/config.py` :
+### Manual Sync
 
-- `DATABASE_URL` - Chemin base de données SQLite
-- `REDIS_URL` - URL Redis pour Celery
-- `SECRET_KEY` - Clé JWT (à changer en production)
+1. Navigate to the **Dashboard**
+2. Click "Sync Now" for the desired subscription and type (Movies/Series)
+3. Monitor progress in real-time
 
-## 📊 API Endpoints
+### Stopping a Sync
 
-| Endpoint | Méthode | Description |
-|----------|---------|-------------|
-| `/api/v1/login` | POST | Authentification |
-| `/api/v1/sync/status` | GET | Statut des syncs |
-| `/api/v1/sync/movies` | POST | Lancer sync films |
-| `/api/v1/sync/series` | POST | Lancer sync séries |
-| `/api/v1/scheduler/config` | GET/PUT | Config planification |
-| `/api/v1/selection/categories` | GET | Liste catégories |
-| `/api/v1/config` | GET/POST | Config Xtream |
-| `/api/v1/logs/stream` | GET | Logs en temps réel (SSE) |
+1. Navigate to the **Dashboard**
+2. Click "Stop Sync" on any running synchronization
 
-## 🤝 Contribution
+### Viewing Logs
 
-Les contributions sont les bienvenues ! N'hésitez pas à :
+1. Navigate to the **Logs** page
+2. View real-time application logs
+3. Use for troubleshooting sync issues
 
-1. Fork le projet
-2. Créer une branche (`git checkout -b feature/AmazingFeature`)
-3. Commit vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrir une Pull Request
+## 🛠️ Troubleshooting
 
-## 📝 License
+### Application won't start
+- Check Docker logs: `sudo docker-compose logs app`
+- Ensure ports 80 and 8000 are not in use
+- Verify Docker and Docker Compose are installed
 
-Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
+### Sync fails
+- Check Xtream Codes credentials in Configuration
+- Verify Xtream server is accessible
+- Review logs in the Logs page
 
-## 🙏 Remerciements
+### Database issues
+- Database is stored in `./db/xtream.db`
+- To reset: stop container, delete `./db/xtream.db`, restart
 
-- [FastAPI](https://fastapi.tiangolo.com/) - Framework API moderne
-- [React](https://react.dev/) - Bibliothèque UI
-- [Celery](https://docs.celeryq.dev/) - Gestion des tâches asynchrones
-- [TailwindCSS](https://tailwindcss.com/) - Framework CSS utility-first
+## 📄 License
 
-## 📞 Support
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Pour toute question ou problème :
-- Ouvrez une [Issue](https://github.com/VOTRE_USERNAME/xtream_to_strm_web/issues)
-- Consultez la [Documentation](#documentation)
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📧 Support
+
+For issues and questions, please open an issue on GitHub.
 
 ---
 
-<div align="center">
-
-**Fait avec ❤️ pour la communauté Jellyfin/Kodi**
-
-</div>
+**Note**: This application is designed for personal use with legitimate Xtream Codes subscriptions. Please respect content licensing and copyright laws.

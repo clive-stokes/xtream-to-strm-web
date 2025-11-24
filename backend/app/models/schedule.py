@@ -9,6 +9,7 @@ class SyncType(str, enum.Enum):
     SERIES = "series"
 
 class Frequency(str, enum.Enum):
+    FIVE_MINUTES = "five_minutes"
     HOURLY = "hourly"
     SIX_HOURS = "six_hours"
     TWELVE_HOURS = "twelve_hours"
@@ -19,7 +20,8 @@ class Schedule(Base):
     __tablename__ = "schedules"
     
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(SQLEnum(SyncType), nullable=False, unique=True)
+    subscription_id = Column(Integer, nullable=False, index=True)
+    type = Column(SQLEnum(SyncType), nullable=False)
     enabled = Column(Boolean, default=False, nullable=False)
     frequency = Column(SQLEnum(Frequency), nullable=False, default=Frequency.DAILY)
     last_run = Column(DateTime, nullable=True)
@@ -32,7 +34,9 @@ class Schedule(Base):
         now = datetime.utcnow()
         base_time = self.last_run if self.last_run else now
         
-        if self.frequency == Frequency.HOURLY:
+        if self.frequency == Frequency.FIVE_MINUTES:
+            return base_time + timedelta(minutes=5)
+        elif self.frequency == Frequency.HOURLY:
             return base_time + timedelta(hours=1)
         elif self.frequency == Frequency.SIX_HOURS:
             return base_time + timedelta(hours=6)

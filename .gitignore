@@ -48,6 +48,9 @@ output_backup/
 data/
 db/
 
+# Screenshots (keep for documentation)
+!screenshots/
+
 # Redis
 dump.rdb
 

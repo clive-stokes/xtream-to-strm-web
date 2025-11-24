@@ -3,6 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 
+interface Subscription {
+    id: number;
+    name: string;
+    is_active: boolean;
+}
+
 interface ScheduleConfig {
     type: 'movies' | 'series';
     enabled: boolean;
@@ -22,40 +28,63 @@ interface ExecutionHistory {
 }
 
 const frequencyOptions = [
-    { value: 'hourly', label: 'Toutes les heures' },
-    { value: 'six_hours', label: 'Toutes les 6 heures' },
-    { value: 'twelve_hours', label: 'Toutes les 12 heures' },
-    { value: 'daily', label: 'Quotidiennement' },
-    { value: 'weekly', label: 'Hebdomadairement' },
+    { value: 'five_minutes', label: 'Every 5 Minutes' },
+    { value: 'hourly', label: 'Every Hour' },
+    { value: 'six_hours', label: 'Every 6 Hours' },
+    { value: 'twelve_hours', label: 'Every 12 Hours' },
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
 ];
 
 export default function Scheduler() {
+    const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+    const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
     const [moviesConfig, setMoviesConfig] = useState<ScheduleConfig | null>(null);
     const [seriesConfig, setSeriesConfig] = useState<ScheduleConfig | null>(null);
     const [history, setHistory] = useState<ExecutionHistory[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchSchedules();
-        fetchHistory();
+        fetchSubscriptions();
     }, []);
 
-    const fetchSchedules = async () => {
+    useEffect(() => {
+        if (selectedSubId) {
+            fetchSchedules();
+            fetchHistory();
+        }
+    }, [selectedSubId]);
+
+    const fetchSubscriptions = async () => {
         try {
-            const response = await api.get<ScheduleConfig[]>('/scheduler/config');
-            const configs = response.data;
-            setMoviesConfig(configs.find((c) => c.type === 'movies') || null);
-            setSeriesConfig(configs.find((c) => c.type === 'series') || null);
+            const res = await api.get<Subscription[]>('/subscriptions/');
+            setSubscriptions(res.data.filter(s => s.is_active));
+            if (res.data.length > 0 && !selectedSubId) {
+                setSelectedSubId(res.data[0].id);
+            }
         } catch (error) {
-            console.error('Error fetching schedules:', error);
+            console.error("Failed to fetch subscriptions", error);
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchHistory = async () => {
+    const fetchSchedules = async () => {
+        if (!selectedSubId) return;
         try {
-            const response = await api.get<ExecutionHistory[]>('/scheduler/history?limit=50');
+            const response = await api.get<ScheduleConfig[]>(`/scheduler/config/${selectedSubId}`);
+            const configs = response.data;
+            setMoviesConfig(configs.find((c) => c.type === 'movies') || null);
+            setSeriesConfig(configs.find((c) => c.type === 'series') || null);
+        } catch (error) {
+            console.error('Error fetching schedules:', error);
+        }
+    };
+
+    const fetchHistory = async () => {
+        if (!selectedSubId) return;
+        try {
+            const response = await api.get<ExecutionHistory[]>(`/scheduler/history/${selectedSubId}?limit=50`);
             setHistory(response.data);
         } catch (error) {
             console.error('Error fetching history:', error);
@@ -63,8 +92,9 @@ export default function Scheduler() {
     };
 
     const updateSchedule = async (type: 'movies' | 'series', enabled: boolean, frequency: string) => {
+        if (!selectedSubId) return;
         try {
-            await api.put(`/scheduler/config/${type}`, { enabled, frequency });
+            await api.put(`/scheduler/config/${selectedSubId}/${type}`, { enabled, frequency });
             await fetchSchedules();
         } catch (error) {
             console.error('Error updating schedule:', error);
@@ -72,8 +102,8 @@ export default function Scheduler() {
     };
 
     const formatDate = (dateString: string | null) => {
-        if (!dateString) return 'Jamais';
-        return new Date(dateString).toLocaleString('fr-FR');
+        if (!dateString) return 'Never';
+        return new Date(dateString).toLocaleString('en-US');
     };
 
     const formatDuration = (start: string, end: string | null) => {
@@ -96,85 +126,107 @@ export default function Scheduler() {
         };
 
         const labels: Record<string, string> = {
-            success: 'Succès',
-            failed: 'Échec',
-            running: 'En cours',
-            cancelled: 'Annulé',
+            success: 'Success',
+            failed: 'Failed',
+            running: 'Running',
+            cancelled: 'Cancelled',
+        };
+
+        const icons: Record<string, JSX.Element> = {
+            success: <CheckCircle className="w-4 h-4" />,
+            failed: <XCircle className="w-4 h-4" />,
+            running: <Loader2 className="w-4 h-4 animate-spin" />,
+            cancelled: <XCircle className="w-4 h-4" />,
         };
 
         return (
-            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border ${colors[status] || colors.success}`}>
-                {status === 'success' && <CheckCircle className="w-3 h-3" />}
-                {status === 'failed' && <XCircle className="w-3 h-3" />}
-                {status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
-                {labels[status] || status}
-            </span>
+            <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border ${colors[status] || colors.cancelled}`}>
+                {icons[status] || icons.cancelled}
+                <span className="text-xs font-medium">{labels[status] || status}</span>
+            </div>
         );
     };
 
     if (loading) {
-        return <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 animate-spin" />
-        </div>;
+        return <div className="flex items-center justify-center h-full">Loading...</div>;
+    }
+
+    if (subscriptions.length === 0) {
+        return (
+            <div className="space-y-8">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Scheduler</h2>
+                    <p className="text-muted-foreground">Configure automatic sync schedules</p>
+                </div>
+                <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground">
+                        No active subscriptions. Go to Configuration to add subscriptions.
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <div>
-                <h2 className="text-3xl font-bold tracking-tight">Planification</h2>
-                <p className="text-muted-foreground">Configurez les synchronisations automatiques</p>
+                <h2 className="text-3xl font-bold tracking-tight">Scheduler</h2>
+                <p className="text-muted-foreground">Configure automatic sync schedules</p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            {/* Subscription Selector */}
+            <div className="flex gap-2">
+                <label className="text-sm font-medium self-center">Subscription:</label>
+                <select
+                    value={selectedSubId || ''}
+                    onChange={(e) => setSelectedSubId(Number(e.target.value))}
+                    className="border rounded-md px-3 py-2 text-sm"
+                >
+                    {subscriptions.map(sub => (
+                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Schedule Configuration */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Movies Schedule */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Clock className="w-5 h-5" />
-                            Films
+                            Movies Schedule
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <span className="font-medium">Activé</span>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="sr-only peer"
-                                    checked={moviesConfig?.enabled || false}
-                                    onChange={(e) =>
-                                        updateSchedule('movies', e.target.checked, moviesConfig?.frequency || 'daily')
-                                    }
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                            </label>
+                            <span className="text-sm font-medium">Enabled</span>
+                            <input
+                                type="checkbox"
+                                checked={moviesConfig?.enabled || false}
+                                onChange={(e) => updateSchedule('movies', e.target.checked, moviesConfig?.frequency || 'daily')}
+                                className="w-4 h-4"
+                            />
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Fréquence</label>
+                            <label className="text-sm font-medium">Frequency</label>
                             <select
-                                className="w-full p-2 border rounded-md bg-background"
                                 value={moviesConfig?.frequency || 'daily'}
-                                onChange={(e) =>
-                                    updateSchedule('movies', moviesConfig?.enabled || false, e.target.value)
-                                }
-                                disabled={!moviesConfig?.enabled}
+                                onChange={(e) => updateSchedule('movies', moviesConfig?.enabled || false, e.target.value)}
+                                className="w-full border rounded-md px-3 py-2 text-sm"
                             >
-                                {frequencyOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                    </option>
+                                {frequencyOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </select>
                         </div>
-
-                        <div className="pt-4 space-y-1 text-sm border-t">
+                        <div className="pt-4 border-t space-y-2 text-sm">
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Dernière exécution:</span>
+                                <span className="text-muted-foreground">Last Run:</span>
                                 <span>{formatDate(moviesConfig?.last_run || null)}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Prochaine exécution:</span>
+                                <span className="text-muted-foreground">Next Run:</span>
                                 <span>{formatDate(moviesConfig?.next_run || null)}</span>
                             </div>
                         </div>
@@ -186,50 +238,38 @@ export default function Scheduler() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Clock className="w-5 h-5" />
-                            Séries
+                            Series Schedule
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <span className="font-medium">Activé</span>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="sr-only peer"
-                                    checked={seriesConfig?.enabled || false}
-                                    onChange={(e) =>
-                                        updateSchedule('series', e.target.checked, seriesConfig?.frequency || 'daily')
-                                    }
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                            </label>
+                            <span className="text-sm font-medium">Enabled</span>
+                            <input
+                                type="checkbox"
+                                checked={seriesConfig?.enabled || false}
+                                onChange={(e) => updateSchedule('series', e.target.checked, seriesConfig?.frequency || 'daily')}
+                                className="w-4 h-4"
+                            />
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Fréquence</label>
+                            <label className="text-sm font-medium">Frequency</label>
                             <select
-                                className="w-full p-2 border rounded-md bg-background"
                                 value={seriesConfig?.frequency || 'daily'}
-                                onChange={(e) =>
-                                    updateSchedule('series', seriesConfig?.enabled || false, e.target.value)
-                                }
-                                disabled={!seriesConfig?.enabled}
+                                onChange={(e) => updateSchedule('series', seriesConfig?.enabled || false, e.target.value)}
+                                className="w-full border rounded-md px-3 py-2 text-sm"
                             >
-                                {frequencyOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                    </option>
+                                {frequencyOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </select>
                         </div>
-
-                        <div className="pt-4 space-y-1 text-sm border-t">
+                        <div className="pt-4 border-t space-y-2 text-sm">
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Dernière exécution:</span>
+                                <span className="text-muted-foreground">Last Run:</span>
                                 <span>{formatDate(seriesConfig?.last_run || null)}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Prochaine exécution:</span>
+                                <span className="text-muted-foreground">Next Run:</span>
                                 <span>{formatDate(seriesConfig?.next_run || null)}</span>
                             </div>
                         </div>
@@ -240,45 +280,37 @@ export default function Scheduler() {
             {/* Execution History */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Historique des exécutions</CardTitle>
+                    <CardTitle>Execution History</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b">
-                                    <th className="text-left p-2 font-medium">Type</th>
-                                    <th className="text-left p-2 font-medium">Début</th>
-                                    <th className="text-left p-2 font-medium">Fin</th>
-                                    <th className="text-left p-2 font-medium">Durée</th>
-                                    <th className="text-left p-2 font-medium">Statut</th>
-                                    <th className="text-right p-2 font-medium">Éléments</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {history.length === 0 ? (
+                    {history.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-8">
+                            No execution history yet
+                        </div>
+                    ) : (
+                        <div className="border rounded-md">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted/50 text-muted-foreground">
                                     <tr>
-                                        <td colSpan={6} className="text-center p-4 text-muted-foreground">
-                                            Aucune exécution pour le moment
-                                        </td>
+                                        <th className="p-3 text-left">Started</th>
+                                        <th className="p-3 text-left">Duration</th>
+                                        <th className="p-3 text-left">Status</th>
+                                        <th className="p-3 text-right">Items</th>
                                     </tr>
-                                ) : (
-                                    history.map((exec) => (
-                                        <tr key={exec.id} className="border-b hover:bg-accent/50">
-                                            <td className="p-2 font-medium">
-                                                {exec.schedule_id === 1 ? 'Films' : 'Séries'}
-                                            </td>
-                                            <td className="p-2 text-sm">{formatDate(exec.started_at)}</td>
-                                            <td className="p-2 text-sm">{formatDate(exec.completed_at)}</td>
-                                            <td className="p-2 text-sm">{formatDuration(exec.started_at, exec.completed_at)}</td>
-                                            <td className="p-2">{getStatusBadge(exec.status)}</td>
-                                            <td className="p-2 text-right">{exec.items_processed}</td>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {history.map(exec => (
+                                        <tr key={exec.id} className="hover:bg-muted/50">
+                                            <td className="p-3">{formatDate(exec.started_at)}</td>
+                                            <td className="p-3">{formatDuration(exec.started_at, exec.completed_at)}</td>
+                                            <td className="p-3">{getStatusBadge(exec.status)}</td>
+                                            <td className="p-3 text-right font-medium">{exec.items_processed}</td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

@@ -5,6 +5,7 @@ class SelectedCategory(Base):
     __tablename__ = "selected_categories"
 
     id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, nullable=False, index=True)
     category_id = Column(String, index=True)
     type = Column(String, index=True) # 'movie' or 'series'
     name = Column(String)

@@ -16,7 +16,9 @@ class SyncType(str, enum.Enum):
 class SyncState(Base):
     __tablename__ = "sync_state"
 
-    type = Column(String, primary_key=True)  # movies or series
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, nullable=False, index=True)
+    type = Column(String, nullable=False)  # movies or series
     last_sync = Column(DateTime, nullable=True)
     status = Column(String, nullable=False, default=SyncStatus.IDLE)
     items_added = Column(Integer, nullable=False, default=0)

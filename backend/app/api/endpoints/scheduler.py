@@ -44,42 +44,49 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/config", response_model=List[ScheduleConfig])
+@router.get("/config/{subscription_id}", response_model=List[ScheduleConfig])
 async def get_schedule_config(
-    db: Session = Depends(get_db),
-    current_user: str = Depends(deps.get_current_user)
+    subscription_id: int,
+    db: Session = Depends(get_db)
 ):
-    """Get all schedule configurations"""
-    schedules = db.query(Schedule).all()
+    """Get all schedule configurations for a subscription"""
+    schedules = db.query(Schedule).filter(Schedule.subscription_id == subscription_id).all()
     
     # Ensure we have entries for both types
     if not schedules:
-        # Create default schedules
+        # Create default schedules for this subscription
         for sync_type in [SyncType.MOVIES, SyncType.SERIES]:
             schedule = Schedule(
+                subscription_id=subscription_id,
                 type=sync_type,
                 enabled=False,
                 frequency=Frequency.DAILY
             )
             db.add(schedule)
         db.commit()
-        schedules = db.query(Schedule).all()
+        schedules = db.query(Schedule).filter(Schedule.subscription_id == subscription_id).all()
     
     return schedules
 
-@router.put("/config/{sync_type}", response_model=ScheduleConfig)
+@router.put("/config/{subscription_id}/{sync_type}", response_model=ScheduleConfig)
 async def update_schedule_config(
+    subscription_id: int,
     sync_type: SyncType,
     update: ScheduleUpdate,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(deps.get_current_user)
+    db: Session = Depends(get_db)
 ):
-    """Update schedule configuration for a specific sync type"""
-    schedule = db.query(Schedule).filter(Schedule.type == sync_type).first()
+    """Update schedule configuration for a specific sync type and subscription"""
+    schedule = db.query(Schedule).filter(
+        Schedule.subscription_id == subscription_id,
+        Schedule.type == sync_type
+    ).first()
     
     if not schedule:
         # Create if doesn't exist
-        schedule = Schedule(type=sync_type)
+        schedule = Schedule(
+            subscription_id=subscription_id,
+            type=sync_type
+        )
         db.add(schedule)
     
     schedule.enabled = update.enabled
@@ -96,20 +103,21 @@ async def update_schedule_config(
     
     return schedule
 
-@router.get("/history", response_model=List[ExecutionHistoryItem])
+@router.get("/history/{subscription_id}", response_model=List[ExecutionHistoryItem])
 async def get_execution_history(
+    subscription_id: int,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     sync_type: Optional[SyncType] = None,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(deps.get_current_user)
+    db: Session = Depends(get_db)
 ):
-    """Get execution history with optional filtering by sync type"""
-    query = db.query(ScheduleExecution)
+    """Get execution history for a subscription with optional filtering by sync type"""
+    query = db.query(ScheduleExecution).join(Schedule).filter(
+        Schedule.subscription_id == subscription_id
+    )
     
     if sync_type:
-        # Join with Schedule to filter by type
-        query = query.join(Schedule).filter(Schedule.type == sync_type)
+        query = query.filter(Schedule.type == sync_type)
     
     executions = query.order_by(ScheduleExecution.started_at.desc()).offset(offset).limit(limit).all()
     

@@ -65,15 +65,18 @@ def delete_generated_files(db: Session = Depends(get_db)):
         # Also clean the main output directory if it exists
         if hasattr(settings, 'OUTPUT_DIR') and os.path.exists(settings.OUTPUT_DIR):
             try:
-                for root, dirs, files in os.walk(settings.OUTPUT_DIR):
-                    for file in files:
-                        if file.endswith(('.strm', '.nfo')):
-                            file_path = os.path.join(root, file)
-                            try:
-                                os.remove(file_path)
-                                deleted_count += 1
-                            except Exception as e:
-                                errors.append(f"Error deleting {file_path}: {str(e)}")
+                # Iterate over all items in the output directory
+                for item in os.listdir(settings.OUTPUT_DIR):
+                    item_path = os.path.join(settings.OUTPUT_DIR, item)
+                    try:
+                        if os.path.isfile(item_path) or os.path.islink(item_path):
+                            os.unlink(item_path)
+                            deleted_count += 1
+                        elif os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                            deleted_count += 1 # Count directory as 1 deletion unit
+                    except Exception as e:
+                        errors.append(f"Error deleting {item_path}: {str(e)}")
             except Exception as e:
                 errors.append(f"Error scanning output directory: {str(e)}")
         

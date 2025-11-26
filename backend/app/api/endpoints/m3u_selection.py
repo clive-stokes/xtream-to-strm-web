@@ -16,8 +16,14 @@ class GroupInfo(BaseModel):
     count: int
     selected: bool
 
+class GroupSelectionItem(BaseModel):
+    group_title: str
+    entry_type: str
+    count: int = 0
+    selected: bool = False
+
 class GroupSelectionRequest(BaseModel):
-    groups: List[Dict[str, str]]  # [{"group_title": "...", "type": "live|vod"}]
+    groups: List[GroupSelectionItem]
 
 
 @router.get("/{source_id}/groups", response_model=List[GroupInfo])
@@ -93,6 +99,7 @@ def get_selected_groups(source_id: int, db: Session = Depends(get_db)):
 def save_group_selection(
     source_id: int,
     request: GroupSelectionRequest,
+    selection_type: str = None,  # Optional: "movie" or "series" to limit scope
     db: Session = Depends(get_db)
 ):
     """Save selected groups for M3U source"""
@@ -100,23 +107,45 @@ def save_group_selection(
     if not source:
         raise HTTPException(status_code=404, detail="M3U source not found")
     
-    # Clear existing selections
-    db.query(M3USelection).filter(M3USelection.m3u_source_id == source_id).delete()
+    # Determine scope of deletion
+    query = db.query(M3USelection).filter(M3USelection.m3u_source_id == source_id)
+    
+    if selection_type:
+        try:
+            stype = SelectionType(selection_type)
+            query = query.filter(M3USelection.selection_type == stype)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid selection_type: {selection_type}")
+            
+    # Clear existing selections in scope
+    query.delete()
     
     # Add new selections
     for group_data in request.groups:
-        selection_type = SelectionType(group_data["type"])
-        
+        # If selection_type is enforced, validate group type matches
+        if selection_type and group_data.entry_type != selection_type:
+            continue # Skip groups that don't match the target type (safety check)
+
+        try:
+            stype = SelectionType(group_data.entry_type)
+        except ValueError:
+             # Skip invalid types or raise error? 
+             # For robustness, let's skip or log. 
+             # But since we validated model, it should be a string.
+             # If it's not "movie" or "series", it will fail.
+             continue
+
         selection = M3USelection(
             m3u_source_id=source_id,
-            group_title=group_data["group_title"],
-            selection_type=selection_type
+            group_title=group_data.group_title,
+            selection_type=stype
         )
         db.add(selection)
     
     db.commit()
     
     return {"message": f"Saved {len(request.groups)} group selections"}
+
 
 
 class SyncRequest(BaseModel):

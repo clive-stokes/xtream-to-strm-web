@@ -143,14 +143,14 @@ async def upload_m3u_file(
 
 
 @router.post("/{source_id}/sync")
-def trigger_m3u_sync(source_id: int, db: Session = Depends(get_db)):
+def trigger_m3u_sync(source_id: int, force: bool = False, db: Session = Depends(get_db)):
     """Trigger sync for M3U source"""
     source = db.query(M3USource).filter(M3USource.id == source_id).first()
     if not source:
         raise HTTPException(status_code=404, detail="M3U source not found")
     
     # Trigger sync task
-    task = sync_m3u_source_task.delay(source_id)
+    task = sync_m3u_source_task.delay(source_id, force=force)
     
     return {"message": "Sync started", "task_id": task.id}
 

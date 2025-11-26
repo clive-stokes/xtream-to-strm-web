@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import config, sync, login, selection, logs, scheduler, subscriptions, admin, m3u_sources, m3u_selection, dashboard
+from app.api.endpoints import config, sync, login, selection, logs, scheduler, subscriptions, admin, m3u_sources, m3u_selection, dashboard, m3u_sync
 
 api_router = APIRouter()
 api_router.include_router(login.router, tags=["login"])
@@ -13,3 +13,4 @@ api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(m3u_sources.router, prefix="/m3u-sources", tags=["m3u"])
 api_router.include_router(m3u_selection.router, prefix="/m3u-selection", tags=["m3u"])
+api_router.include_router(m3u_sync.router, prefix="/m3u-sync", tags=["m3u-sync"])

@@ -3,7 +3,8 @@
 A modern, full-featured web application for managing Xtream Codes and M3U playlist content, generating `.strm` and `.nfo` files compatible with Jellyfin and Kodi.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![Docker Hub](https://img.shields.io/docker/v/mourabena2ui/xtream-to-strm-web?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/mourabena2ui/xtream-to-strm-web)
+[![Docker Pulls](https://img.shields.io/docker/pulls/mourabena2ui/xtream-to-strm-web)](https://hub.docker.com/r/mourabena2ui/xtream-to-strm-web)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
 
@@ -11,13 +12,12 @@ A modern, full-featured web application for managing Xtream Codes and M3U playli
 
 - [Features](#-features)
 - [Screenshots](#-screenshots)
-- [Architecture](#-architecture)
+- [Quick Start](#-quick-start)
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Configuration](#-configuration)
 - [API Documentation](#-api-documentation)
 - [Development](#-development)
-- [Contributing](#-contributing)
 - [License](#-license)
 
 ## ✨ Features
@@ -72,87 +72,112 @@ A modern, full-featured web application for managing Xtream Codes and M3U playli
 ![Administration](screenshots/administration.png)
 *System administration with cleanup and reset tools*
 
-## 🏗️ Architecture
+## 🚀 Quick Start
 
-### Technology Stack
+The fastest way to get started is using Docker Hub:
 
-**Backend:**
-- **FastAPI**: Modern, fast web framework for building APIs
-- **SQLAlchemy**: SQL toolkit and ORM
-- **Celery**: Distributed task queue for background jobs
-- **Redis**: In-memory data store for caching and task queue
-- **Python 3.11**: Latest Python with improved performance
+```bash
+# Pull the latest image
+docker pull mourabena2ui/xtream-to-strm-web:latest
 
-**Frontend:**
-- **React 18**: Modern React with hooks and concurrent features
-- **TypeScript**: Type-safe JavaScript
-- **Vite**: Next-generation frontend tooling
-- **TailwindCSS**: Utility-first CSS framework
-- **Shadcn/ui**: Beautiful, accessible component library
+# Run the container
+docker run -d \
+  -p 8000:8000 \
+  -v $(pwd)/output:/app/output \
+  -v $(pwd)/data:/app/data \
+  --name xtream-to-strm \
+  mourabena2ui/xtream-to-strm-web:latest
 
-**Infrastructure:**
-- **Docker**: Containerization for easy deployment
-- **Docker Compose**: Multi-container orchestration
-- **SQLite**: Lightweight, embedded database
-- **Uvicorn**: Lightning-fast ASGI server
-
-### Project Structure
-
-```
-xtream_to_strm_web/
-├── backend/
-│   ├── app/
-│   │   ├── api/              # API endpoints
-│   │   │   └── endpoints/    # Route handlers
-│   │   ├── core/             # Core configuration
-│   │   ├── db/               # Database setup
-│   │   ├── models/           # SQLAlchemy models
-│   │   ├── services/         # Business logic
-│   │   └── tasks/            # Celery tasks
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/       # Reusable components
-│   │   ├── lib/              # Utilities
-│   │   └── pages/            # Page components
-│   └── package.json
-├── docker-compose.yml
-├── Dockerfile.single
-└── README.md
+# Access the web interface at http://localhost:8000
 ```
 
-## 🚀 Installation
+That's it! The application is now running and accessible at `http://localhost:8000`.
 
-### Prerequisites
+### Stopping the Container
 
-- Docker and Docker Compose
+```bash
+docker stop xtream-to-strm
+docker rm xtream-to-strm
+```
+
+## 📦 Installation
+
+### Method 1: Docker Hub (Recommended)
+
+Pull and run the pre-built image from Docker Hub:
+
+```bash
+# Pull specific version
+docker pull mourabena2ui/xtream-to-strm-web:2.0
+
+# Or pull latest
+docker pull mourabena2ui/xtream-to-strm-web:latest
+
+# Run with docker-compose (recommended)
+# Create a docker-compose.yml file:
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  xtream-to-strm:
+    image: mourabena2ui/xtream-to-strm-web:latest
+    container_name: xtream-to-strm-web
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./output:/app/output
+      - ./data:/app/data
+    restart: unless-stopped
+EOF
+
+# Start the application
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the application
+docker-compose down
+```
+
+### Method 2: Build from Source
+
+<details>
+<summary>Click to expand source installation instructions</summary>
+
+**Prerequisites:**
+- Docker
 - Git
 
-### Quick Start
+**Steps:**
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/xtream_to_strm_web.git
-   cd xtream_to_strm_web
+   git clone https://github.com/mourabena2ui/xtream-to-strm-web.git
+   cd xtream-to-strm-web
    ```
 
-2. **Build and start the application:**
+2. **Build the Docker image:**
    ```bash
-   docker-compose up -d --build
+   docker build -f Dockerfile.single -t xtream-to-strm-web:latest .
    ```
 
-3. **Access the web interface:**
-   Open your browser and navigate to `http://localhost`
-
-4. **Stop the application:**
+3. **Run the container:**
    ```bash
-   docker-compose down
+   docker run -d \
+     -p 8000:8000 \
+     -v $(pwd)/output:/app/output \
+     -v $(pwd)/data:/app/data \
+     --name xtream-to-strm \
+     xtream-to-strm-web:latest
    ```
 
-### Manual Installation (Development)
+</details>
+
+### Method 3: Development Setup
 
 <details>
-<summary>Click to expand manual installation instructions</summary>
+<summary>Click to expand development installation instructions</summary>
 
 **Backend:**
 ```bash
@@ -160,7 +185,18 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+
+# Start Redis (required)
+docker run -d -p 6379:6379 redis:alpine
+
+# Start Celery Worker
+celery -A app.core.celery_app worker --loglevel=info &
+
+# Start Celery Beat
+celery -A app.core.celery_app beat --loglevel=info &
+
+# Start the API server
+uvicorn app.main:app --reload --port 8000
 ```
 
 **Frontend:**
@@ -168,17 +204,6 @@ uvicorn app.main:app --reload
 cd frontend
 npm install
 npm run dev
-```
-
-**Redis (required for Celery):**
-```bash
-docker run -d -p 6379:6379 redis:alpine
-```
-
-**Celery Worker:**
-```bash
-cd backend
-celery -A app.core.celery_app worker --loglevel=info
 ```
 
 </details>
@@ -251,31 +276,34 @@ celery -A app.core.celery_app worker --loglevel=info
 
 ## ⚙️ Configuration
 
-### Environment Variables
-
-The application uses the following configuration (defined in `backend/app/core/config.py`):
-
-```python
-API_V1_STR = "/api/v1"          # API prefix
-PROJECT_NAME = "Xtream to STRM"  # Application name
-OUTPUT_DIR = "/output"           # Default output directory
-```
-
 ### Docker Volumes
 
-The Docker setup mounts the following volumes:
+The application uses the following volumes:
 
-```yaml
-volumes:
-  - ./output:/output          # Generated .strm files
-  - ./data:/app/data          # SQLite database
+| Volume | Purpose | Required |
+|--------|---------|----------|
+| `/app/output` | Generated .strm and .nfo files | Yes |
+| `/app/data` | SQLite database and application data | Yes |
+
+### Environment Variables
+
+The application can be configured using environment variables:
+
+```bash
+docker run -d \
+  -p 8000:8000 \
+  -e API_V1_STR="/api/v1" \
+  -e PROJECT_NAME="Xtream to STRM" \
+  -v ./output:/app/output \
+  -v ./data:/app/data \
+  mourabena2ui/xtream-to-strm-web:latest
 ```
 
 ## 📚 API Documentation
 
 The API documentation is automatically generated and available at:
-- **Swagger UI**: `http://localhost/api/v1/docs`
-- **ReDoc**: `http://localhost/api/v1/redoc`
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
 
 ### Main Endpoints
 
@@ -301,54 +329,45 @@ The API documentation is automatically generated and available at:
 
 ## 🛠️ Development
 
-### Running Tests
-
-```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
-```
-
-### Code Style
+### Technology Stack
 
 **Backend:**
-```bash
-# Format with black
-black app/
-
-# Lint with flake8
-flake8 app/
-```
+- FastAPI - Modern, fast web framework
+- SQLAlchemy - SQL toolkit and ORM
+- Celery - Distributed task queue
+- Redis - In-memory data store
+- Python 3.11 - Latest Python with improved performance
 
 **Frontend:**
-```bash
-# Lint
-npm run lint
+- React 18 - Modern React with hooks
+- TypeScript - Type-safe JavaScript
+- Vite - Next-generation frontend tooling
+- TailwindCSS - Utility-first CSS framework
+- Shadcn/ui - Beautiful component library
 
-# Format
-npm run format
+### Project Structure
+
 ```
-
-### Building for Production
-
-```bash
-docker-compose -f docker-compose.yml build
-docker-compose -f docker-compose.yml up -d
+xtream_to_strm_web/
+├── backend/
+│   ├── app/
+│   │   ├── api/              # API endpoints
+│   │   ├── core/             # Core configuration
+│   │   ├── db/               # Database setup
+│   │   ├── models/           # SQLAlchemy models
+│   │   ├── services/         # Business logic
+│   │   └── tasks/            # Celery tasks
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # Reusable components
+│   │   ├── lib/              # Utilities
+│   │   └── pages/            # Page components
+│   └── package.json
+├── Dockerfile.single         # Production Dockerfile
+├── docker_start.sh          # Container startup script
+└── README.md
 ```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
 ## 📝 License
 
@@ -363,13 +382,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 If you encounter any issues or have questions, please:
-1. Check the [Issues](https://github.com/yourusername/xtream_to_strm_web/issues) page
+1. Check the [Issues](https://github.com/mourabena2ui/xtream-to-strm-web/issues) page
 2. Create a new issue if your problem isn't already listed
 3. Provide as much detail as possible, including logs and screenshots
 
 ## 🔄 Changelog
 
-### Version 2.0.0 (Current)
+### Version 2.0.0 (2025-11-26)
 - ✨ Added M3U playlist support
 - ✨ Refactored UI with separate XtreamTV and M3U sections
 - ✨ Removed Live TV functionality (focus on VOD only)
@@ -378,6 +397,7 @@ If you encounter any issues or have questions, please:
 - 🐛 Improved error handling and user feedback
 - 🎨 Enhanced UI/UX with better navigation
 - 📚 Comprehensive documentation
+- 🐳 Published to Docker Hub
 
 ### Version 1.0.0
 - 🎉 Initial release
@@ -387,4 +407,4 @@ If you encounter any issues or have questions, please:
 
 ---
 
-Made with ❤️ by the community
+Made with ❤️ by the community | [Docker Hub](https://hub.docker.com/r/mourabena2ui/xtream-to-strm-web) | [GitHub](https://github.com/mourabena2ui/xtream-to-strm-web)

@@ -28,6 +28,16 @@ class SyncStatusResponse(BaseModel):
     items_deleted: int
     error_message: Optional[str] = None
 
+class M3USyncStatusResponse(BaseModel):
+    id: Optional[int] = None
+    m3u_source_id: int
+    type: str
+    last_sync: Optional[datetime]
+    status: str
+    items_added: int
+    items_deleted: int
+    error_message: Optional[str] = None
+
 class SyncTriggerResponse(BaseModel):
     message: str
     task_id: str

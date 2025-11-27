@@ -97,9 +97,6 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             ext = movie['container_extension']
             cat_id = movie['category_id']
             tmdb_id = movie.get('tmdb')  # Xtream API uses 'tmdb' not 'tmdb_id'
-            
-            # DEBUG: Log what we receive from API
-            logger.info(f"[DEBUG] Movie '{name}' (ID: {stream_id}) - TMDB ID from get_vod_streams: {tmdb_id}")
 
             # PERFORMANCE OPTIMIZATION: Disabled for initial sync speed
             # Fetching detailed info for every movie is too slow (2-4s per movie)
@@ -132,10 +129,6 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             # Always create NFO file with all available metadata
             nfo_path = f"{cat_dir}/{safe_name}.nfo"
             nfo_content = fm.generate_movie_nfo(movie)
-            
-            # DEBUG: Log generated NFO preview
-            logger.info(f"[DEBUG] Generated NFO for '{name}': {nfo_content[:200]}...")
-            
             await fm.write_nfo(nfo_path, nfo_content)
 
             # Update Cache

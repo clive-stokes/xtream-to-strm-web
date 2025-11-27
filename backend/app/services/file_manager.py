@@ -42,11 +42,24 @@ class FileManager:
             pass # Directory not empty
 
     def generate_movie_nfo(self, movie_data: dict) -> str:
-        """Generate NFO file for a movie using all available metadata"""
+        """Generate NFO file for a movie - TMDB ID only if available, otherwise just the title"""
         tmdb_id = movie_data.get('tmdb_id', '')
+        title = movie_data.get('name', 'Unknown')
         
-        # If TMDB ID exists and is valid, use minimal NFO with just the ID
-        if tmdb_id and str(tmdb_id).lower() not in ['', 'null', 'none', '0']:
+        # Check if TMDB ID is valid (not empty, not null, not 0, not "0")
+        has_valid_tmdb = False
+        if tmdb_id:
+            tmdb_str = str(tmdb_id).strip()
+            if tmdb_str and tmdb_str.lower() not in ['null', 'none', '0', '']:
+                try:
+                    # Verify it's a valid number and not zero
+                    if int(tmdb_str) > 0:
+                        has_valid_tmdb = True
+                except (ValueError, TypeError):
+                    pass
+        
+        # If we have a valid TMDB ID, use minimal NFO with just the ID
+        if has_valid_tmdb:
             return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <movie>
   <tmdbid>{tmdb_id}</tmdbid>
@@ -54,7 +67,6 @@ class FileManager:
 </movie>"""
         
         # Otherwise, use all available Xtream metadata
-        title = movie_data.get('name', 'Unknown')
         plot = movie_data.get('plot', movie_data.get('description', ''))
         year = movie_data.get('year', movie_data.get('releasedate', ''))
         rating = movie_data.get('rating', movie_data.get('rating_5based', ''))
@@ -133,12 +145,26 @@ class FileManager:
         nfo += '</movie>'
         return nfo
 
+
     def generate_show_nfo(self, series_data: dict) -> str:
-        """Generate NFO file for a TV show using all available metadata"""
+        """Generate NFO file for a TV show - TMDB ID only if available, otherwise just the title"""
         tmdb_id = series_data.get('tmdb_id', '')
+        title = series_data.get('name', 'Unknown')
         
-        # If TMDB ID exists and is valid, use minimal NFO with just the ID
-        if tmdb_id and str(tmdb_id).lower() not in ['', 'null', 'none', '0']:
+        # Check if TMDB ID is valid (not empty, not null, not 0, not "0")
+        has_valid_tmdb = False
+        if tmdb_id:
+            tmdb_str = str(tmdb_id).strip()
+            if tmdb_str and tmdb_str.lower() not in ['null', 'none', '0', '']:
+                try:
+                    # Verify it's a valid number and not zero
+                    if int(tmdb_str) > 0:
+                        has_valid_tmdb = True
+                except (ValueError, TypeError):
+                    pass
+        
+        # If we have a valid TMDB ID, use minimal NFO with just the ID
+        if has_valid_tmdb:
             return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <tvshow>
   <tmdbid>{tmdb_id}</tmdbid>
@@ -146,7 +172,6 @@ class FileManager:
 </tvshow>"""
         
         # Otherwise, use all available Xtream metadata
-        title = series_data.get('name', 'Unknown')
         plot = series_data.get('plot', series_data.get('description', ''))
         year = series_data.get('year', series_data.get('releaseDate', ''))
         rating = series_data.get('rating', series_data.get('rating_5based', ''))
@@ -199,6 +224,7 @@ class FileManager:
         
         nfo += '</tvshow>'
         return nfo
+
 
 
     def _escape_xml(self, text: str) -> str:

@@ -98,6 +98,18 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cat_id = movie['category_id']
             tmdb_id = movie.get('tmdb_id')
 
+            # If TMDB ID is missing or invalid, try to fetch detailed info
+            if not tmdb_id or str(tmdb_id) in ['0', 'None', 'null', '']:
+                try:
+                    detailed_info = await xc.get_vod_info(str(stream_id))
+                    if detailed_info and 'info' in detailed_info:
+                        fetched_tmdb = detailed_info['info'].get('tmdb_id')
+                        if fetched_tmdb:
+                            tmdb_id = fetched_tmdb
+                            movie['tmdb_id'] = tmdb_id # Update movie dict for NFO generation
+                except Exception as e:
+                    logger.warning(f"Failed to fetch detailed info for movie {stream_id}: {e}")
+
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(name)
@@ -141,6 +153,18 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             nfo_path = f"{fm.output_dir}/{safe_cat}/{safe_name}.nfo"
             
             if not os.path.exists(nfo_path):
+                # Fetch TMDB ID if missing
+                tmdb_id = movie.get('tmdb_id')
+                if not tmdb_id or str(tmdb_id) in ['0', 'None', 'null', '']:
+                    try:
+                        detailed_info = await xc.get_vod_info(str(stream_id))
+                        if detailed_info and 'info' in detailed_info:
+                            fetched_tmdb = detailed_info['info'].get('tmdb_id')
+                            if fetched_tmdb:
+                                movie['tmdb_id'] = fetched_tmdb
+                    except Exception:
+                        pass
+
                 cat_dir = f"{fm.output_dir}/{safe_cat}"
                 fm.ensure_directory(cat_dir)
                 nfo_content = fm.generate_movie_nfo(movie)
@@ -241,13 +265,19 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}"
             fm.ensure_directory(series_dir)
             
+            # Fetch Episodes and Info
+            info_response = await xc.get_series_info(str(series_id))
+            series_info = info_response.get('info', {})
+            episodes_data = info_response.get('episodes', {})
+            
+            # Update TMDB ID if available
+            if series_info.get('tmdb_id'):
+                series['tmdb_id'] = series_info['tmdb_id']
+                tmdb_id = series_info['tmdb_id'] # Update local var for cache
+
             # Always create tvshow.nfo
             nfo_path = f"{series_dir}/tvshow.nfo"
             await fm.write_nfo(nfo_path, fm.generate_show_nfo(series))
-
-            # Fetch Episodes
-            info = await xc.get_series_info(str(series_id))
-            episodes_data = info.get('episodes', {})
             
             for season_key, episodes in episodes_data.items():
                 season_num = int(season_key)
@@ -282,9 +312,9 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cached.tmdb_id = str(tmdb_id) if tmdb_id else None
 
         # Check for missing NFO files
-        logger.info(f"Checking for missing series NFO files across {len(to_add_update)} series...")
+        logger.info(f"Checking for missing series NFO files across {len(all_series)} series...")
         nfo_created_count = 0
-        for series in to_add_update:
+        for series in all_series:
             series_id = int(series['series_id'])
             name = series['name']
             cat_id = series['category_id']
@@ -297,6 +327,17 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             tvshow_nfo_path = f"{series_dir}/tvshow.nfo"
             
             if os.path.exists(series_dir) and not os.path.exists(tvshow_nfo_path):
+                # Fetch TMDB ID if missing
+                tmdb_id = series.get('tmdb_id')
+                if not tmdb_id or str(tmdb_id) in ['0', 'None', 'null', '']:
+                    try:
+                        info_response = await xc.get_series_info(str(series_id))
+                        series_info = info_response.get('info', {})
+                        if series_info.get('tmdb_id'):
+                            series['tmdb_id'] = series_info['tmdb_id']
+                    except Exception:
+                        pass
+
                 await fm.write_nfo(tvshow_nfo_path, fm.generate_show_nfo(series))
                 nfo_created_count += 1
         

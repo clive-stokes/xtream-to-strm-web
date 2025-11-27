@@ -57,6 +57,9 @@ class XtreamClient:
     async def get_series_info(self, series_id: str) -> Dict:
         return await self._request("get_series_info", series_id=series_id)
 
+    async def get_vod_info(self, vod_id: str) -> Dict:
+        return await self._request("get_vod_info", vod_id=vod_id)
+
     def get_stream_url(self, stream_type: str, stream_id: str, extension: str) -> str:
         # stream_type: "movie" or "series"
         return f"{self.base_url}/{stream_type}/{self.username}/{self.password}/{stream_id}.{extension}"

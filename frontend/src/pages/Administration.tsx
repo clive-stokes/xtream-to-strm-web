@@ -1,11 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, AlertTriangle, Database } from 'lucide-react';
+import { Input } from "@/components/ui/input";
+import { Trash2, AlertTriangle, Database, Settings } from 'lucide-react';
 import api from '@/lib/api';
 
 export default function Administration() {
     const [loading, setLoading] = useState(false);
+    const [prefixRegex, setPrefixRegex] = useState('');
+    const [formatDate, setFormatDate] = useState(false);
+    const [cleanName, setCleanName] = useState(false);
+    const [regexLoading, setRegexLoading] = useState(false);
+
+    // Load current settings on mount
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const response = await api.get('/config');
+                setPrefixRegex(response.data.PREFIX_REGEX || '^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\\s*-\\s*)');
+                setFormatDate(response.data.FORMAT_DATE_IN_TITLE === true);
+                setCleanName(response.data.CLEAN_NAME === true);
+            } catch (error) {
+                console.error('Failed to load settings', error);
+            }
+        };
+        loadSettings();
+    }, []);
+
+    const saveNfoSettings = async () => {
+        setRegexLoading(true);
+        try {
+            await api.post('/config', {
+                PREFIX_REGEX: prefixRegex,
+                FORMAT_DATE_IN_TITLE: formatDate,
+                CLEAN_NAME: cleanName
+            });
+            alert('NFO settings saved successfully!');
+        } catch (error) {
+            console.error('Failed to save settings', error);
+            alert('Failed to save settings. Please check the logs.');
+        } finally {
+            setRegexLoading(false);
+        }
+    };
 
     return (
         <div className="space-y-8">
@@ -124,6 +161,85 @@ export default function Administration() {
                         >
                             <AlertTriangle className="w-4 h-4 mr-2" />
                             Reset Everything
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* NFO Settings */}
+            <div>
+                <h3 className="text-xl font-semibold mb-4">NFO Settings</h3>
+                <Card className="border-blue-200 dark:border-blue-900">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                            <Settings className="w-5 h-5" />
+                            Title Formatting
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Title Prefix Regex</label>
+                            <p className="text-sm text-muted-foreground">
+                                Pattern to strip language/country prefixes. Default: <code className="bg-muted px-1 py-0.5 rounded">^(?:[A-Za-z0-9.-]+_|[A-Za-z]{"{2,}"}\\s*-\\s*)</code>
+                            </p>
+                            <Input
+                                type="text"
+                                value={prefixRegex}
+                                onChange={(e) => setPrefixRegex(e.target.value)}
+                                placeholder="^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\s*-\s*)"
+                                className="font-mono"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Examples: "FR - Movie Name" → "Movie Name"
+                            </p>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t">
+                            <div className="flex items-start space-x-3">
+                                <input
+                                    type="checkbox"
+                                    id="formatDate"
+                                    checked={formatDate}
+                                    onChange={(e) => setFormatDate(e.target.checked)}
+                                    className="h-4 w-4 mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                    <label htmlFor="formatDate" className="text-sm font-medium leading-none cursor-pointer">
+                                        Format date at end of name
+                                    </label>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        If name ends with year (e.g. "Name_2024"), format as "Name (2024)"
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start space-x-3">
+                                <input
+                                    type="checkbox"
+                                    id="cleanName"
+                                    checked={cleanName}
+                                    onChange={(e) => setCleanName(e.target.checked)}
+                                    className="h-4 w-4 mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                    <label htmlFor="cleanName" className="text-sm font-medium leading-none cursor-pointer">
+                                        Clean name
+                                    </label>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Replace all remaining underscores "_" with spaces
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Button
+                            variant="default"
+                            className="w-full"
+                            onClick={saveNfoSettings}
+                            disabled={regexLoading}
+                        >
+                            <Settings className="w-4 h-4 mr-2" />
+                            Save NFO Settings
                         </Button>
                     </CardContent>
                 </Card>

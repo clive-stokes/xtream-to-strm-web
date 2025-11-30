@@ -5,6 +5,7 @@ from app.models.m3u_source import M3USource, SourceType
 from app.models.m3u_entry import M3UEntry, EntryType
 from app.models.m3u_selection import M3USelection, SelectionType
 from app.models.m3u_sync_state import M3USyncState
+from app.models.settings import SettingsModel
 from app.services.m3u_parser import parse_m3u_url, parse_m3u_file
 from app.services.file_manager import FileManager
 import logging
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Set, Optional, Tuple
 import shutil
 import hashlib
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -106,31 +108,6 @@ def cleanup_deselected_groups(
     return deleted_count
 
 
-def create_strm_file(
-    entry: M3UEntry,
-    base_dir: str,
-    content_type: str
-) -> bool:
-    """Create STRM file and return True if it's newly created"""
-    group = entry.group_title or "Uncategorized"
-    safe_group = sanitize_name(group)
-    safe_title = sanitize_name(entry.title)
-    
-    group_dir = Path(base_dir) / content_type / safe_group
-    group_dir.mkdir(parents=True, exist_ok=True)
-    
-    strm_path = group_dir / f"{safe_title}{STRM_EXTENSION}"
-    file_existed = strm_path.exists()
-    
-    try:
-        with open(strm_path, 'w') as f:
-            f.write(entry.url)
-        return not file_existed  # True if newly created
-    except Exception as e:
-        logger.error(f"Error creating STRM file {strm_path}: {e}")
-        return False
-
-
 # ============================================================================
 # Main Sync Task
 # ============================================================================
@@ -146,7 +123,16 @@ def sync_m3u_source_task(source_id: int, sync_types: list = None, force: bool = 
             logger.error(f"M3U source {source_id} not found")
             return {"error": "Source not found"}
         
+        # Get settings
+        settings = {s.key: s.value for s in db.query(SettingsModel).all()}
+        prefix_regex = settings.get("PREFIX_REGEX")
+        format_date = settings.get("FORMAT_DATE_IN_TITLE") == "true"
+        clean_name = settings.get("CLEAN_NAME") == "true"
+        
         logger.info(f"Starting M3U sync for source: {source.name}")
+        
+        # Initialize FileManager
+        fm = FileManager(source.output_dir)
         
         # OPTIMIZATION: Check if any groups are selected BEFORE parsing M3U
         selected_groups = db.query(M3USelection).filter(
@@ -320,6 +306,10 @@ def sync_m3u_source_task(source_id: int, sync_types: list = None, force: bool = 
         series_files_created = 0
         
         # Process entries for file generation
+        # We need an event loop for async FileManager methods
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         for entry in db.query(M3UEntry).filter(M3UEntry.m3u_source_id == source_id).all():
             try:
                 # Filter by sync_types if provided
@@ -345,18 +335,45 @@ def sync_m3u_source_task(source_id: int, sync_types: list = None, force: bool = 
                 else:
                     continue
                 
-                # Create STRM file using helper function
-                is_new = create_strm_file(entry, base_dir, content_type)
+                # Prepare data for NFO generation
+                safe_group = sanitize_name(group)
+                safe_title = sanitize_name(entry.title)
                 
-                if is_new:
-                    if entry.entry_type == EntryType.MOVIE:
+                group_dir = Path(base_dir) / content_type / safe_group
+                group_dir.mkdir(parents=True, exist_ok=True)
+                
+                strm_path = group_dir / f"{safe_title}{STRM_EXTENSION}"
+                nfo_path = group_dir / f"{safe_title}.nfo"
+                
+                # Check if STRM exists to count as new
+                is_new = not strm_path.exists()
+                
+                # Create STRM file
+                loop.run_until_complete(fm.write_strm(str(strm_path), entry.url))
+                
+                # Create NFO file
+                data = {
+                    "name": entry.title,
+                    "cover": entry.logo,
+                    # Add other fields if available in M3U entry
+                }
+                
+                if entry.entry_type == EntryType.MOVIE:
+                    nfo_content = fm.generate_movie_nfo(data, prefix_regex, format_date, clean_name)
+                    if is_new:
                         movies_files_created += 1
-                    elif entry.entry_type == EntryType.SERIES:
+                else:
+                    nfo_content = fm.generate_show_nfo(data, prefix_regex, format_date, clean_name)
+                    if is_new:
                         series_files_created += 1
+                
+                loop.run_until_complete(fm.write_nfo(str(nfo_path), nfo_content))
                         
             except Exception as e:
                 logger.error(f"Error processing entry {entry.title}: {e}")
                 continue
+        
+        loop.close()
         
         files_created = movies_files_created + series_files_created
         

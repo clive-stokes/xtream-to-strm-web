@@ -9,6 +9,9 @@ class ConfigUpdate(BaseModel):
     OUTPUT_DIR: Optional[str] = None
     MOVIES_DIR: Optional[str] = None
     SERIES_DIR: Optional[str] = None
+    PREFIX_REGEX: Optional[str] = None
+    FORMAT_DATE_IN_TITLE: Optional[bool] = None
+    CLEAN_NAME: Optional[bool] = None
 
 class ConfigResponse(BaseModel):
     XC_URL: Optional[str] = None
@@ -17,6 +20,9 @@ class ConfigResponse(BaseModel):
     OUTPUT_DIR: Optional[str] = None
     MOVIES_DIR: Optional[str] = None
     SERIES_DIR: Optional[str] = None
+    PREFIX_REGEX: Optional[str] = None
+    FORMAT_DATE_IN_TITLE: Optional[bool] = None
+    CLEAN_NAME: Optional[bool] = None
 
 class SyncStatusResponse(BaseModel):
     id: Optional[int] = None

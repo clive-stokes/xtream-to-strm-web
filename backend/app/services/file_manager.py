@@ -41,10 +41,28 @@ class FileManager:
         except OSError:
             pass # Directory not empty
 
-    def generate_movie_nfo(self, movie_data: dict) -> str:
+    def generate_movie_nfo(self, movie_data: dict, prefix_regex: Optional[str] = None, format_date: bool = False, clean_name: bool = False) -> str:
         """Generate NFO file for a movie - TMDB ID only if available, otherwise just the title"""
         tmdb_id = movie_data.get('tmdb', '')  # Xtream API uses 'tmdb' not 'tmdb_id'
-        title = movie_data.get('name', 'Unknown')
+        # Use o_name as title if available, otherwise name
+        title = movie_data.get('o_name') or movie_data.get('name', 'Unknown')
+        
+        # Strip language prefix if present (e.g. "FR - ", "TN - ", "ARA - ")
+        # Use provided regex or default
+        regex = prefix_regex if prefix_regex else r'^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\s*-\s*)'
+        try:
+            title = re.sub(regex, '', title)
+        except re.error:
+            # Fallback to default if custom regex is invalid
+            title = re.sub(r'^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\s*-\s*)', '', title)
+            
+        # Format date at end: "Name_2024" -> "Name (2024)"
+        if format_date:
+            title = re.sub(r'[_\s](\d{4})$', r' (\1)', title)
+            
+        # Clean name: replace underscores with spaces
+        if clean_name:
+            title = title.replace('_', ' ')
         
         # Check if TMDB ID is valid (not empty, not null, not 0, not "0")
         has_valid_tmdb = False
@@ -67,15 +85,19 @@ class FileManager:
 </movie>"""
         
         # Otherwise, use all available Xtream metadata
-        plot = movie_data.get('plot', movie_data.get('description', ''))
-        year = movie_data.get('year', movie_data.get('releasedate', ''))
-        rating = movie_data.get('rating', movie_data.get('rating_5based', ''))
+        plot = movie_data.get('plot') or movie_data.get('description', '')
+        year = movie_data.get('year') or movie_data.get('releasedate', '')
+        rating = movie_data.get('rating') or movie_data.get('rating_5based', '')
         genre = movie_data.get('genre', '')
         director = movie_data.get('director', '')
-        cast_list = movie_data.get('cast', '')
-        duration = movie_data.get('duration', '')
+        cast_list = movie_data.get('cast') or movie_data.get('actors', '')
+        duration = movie_data.get('duration') or movie_data.get('episode_run_time', '')
         trailer = movie_data.get('youtube_trailer', '')
-        cover = movie_data.get('cover_big', movie_data.get('backdrop_path_original', ''))
+        cover = movie_data.get('movie_image') or movie_data.get('cover_big') or movie_data.get('stream_icon') or movie_data.get('backdrop_path_original', '')
+        
+        # Handle backdrop/fanart
+        backdrop_path = movie_data.get('backdrop_path', [])
+        fanart = backdrop_path[0] if isinstance(backdrop_path, list) and backdrop_path else ''
         
         # Convert rating from 5-based to 10-based if needed
         if rating and str(rating_5based := movie_data.get('rating_5based')):
@@ -140,16 +162,38 @@ class FileManager:
         # Artwork
         if cover:
             nfo += f'  <thumb>{cover}</thumb>\n'
+        
+        if fanart:
+            nfo += f'  <fanart><thumb>{fanart}</thumb></fanart>\n'
+        elif cover:
             nfo += f'  <fanart><thumb>{cover}</thumb></fanart>\n'
         
         nfo += '</movie>'
         return nfo
 
 
-    def generate_show_nfo(self, series_data: dict) -> str:
+    def generate_show_nfo(self, series_data: dict, prefix_regex: Optional[str] = None, format_date: bool = False, clean_name: bool = False) -> str:
         """Generate NFO file for a TV show - TMDB ID only if available, otherwise just the title"""
         tmdb_id = series_data.get('tmdb', '')  # Xtream API uses 'tmdb' not 'tmdb_id'
-        title = series_data.get('name', 'Unknown')
+        # Use o_name as title if available, otherwise name
+        title = series_data.get('o_name') or series_data.get('name', 'Unknown')
+
+        # Strip language prefix if present (e.g. "FR - ", "TN - ", "ARA - ")
+        # Use provided regex or default
+        regex = prefix_regex if prefix_regex else r'^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\s*-\s*)'
+        try:
+            title = re.sub(regex, '', title)
+        except re.error:
+            # Fallback to default if custom regex is invalid
+            title = re.sub(r'^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\s*-\s*)', '', title)
+            
+        # Format date at end: "Name_2024" -> "Name (2024)"
+        if format_date:
+            title = re.sub(r'[_\s](\d{4})$', r' (\1)', title)
+            
+        # Clean name: replace underscores with spaces
+        if clean_name:
+            title = title.replace('_', ' ')
         
         # Check if TMDB ID is valid (not empty, not null, not 0, not "0")
         has_valid_tmdb = False
@@ -172,13 +216,17 @@ class FileManager:
 </tvshow>"""
         
         # Otherwise, use all available Xtream metadata
-        plot = series_data.get('plot', series_data.get('description', ''))
-        year = series_data.get('year', series_data.get('releaseDate', ''))
-        rating = series_data.get('rating', series_data.get('rating_5based', ''))
+        plot = series_data.get('plot') or series_data.get('description', '')
+        year = series_data.get('year') or series_data.get('releaseDate', '')
+        rating = series_data.get('rating') or series_data.get('rating_5based', '')
         genre = series_data.get('genre', '')
-        cast_list = series_data.get('cast', '')
+        cast_list = series_data.get('cast') or series_data.get('actors', '')
         director = series_data.get('director', '')
-        cover = series_data.get('cover_big', series_data.get('backdrop_path_original', ''))
+        cover = series_data.get('cover') or series_data.get('cover_big') or series_data.get('stream_icon') or series_data.get('backdrop_path_original', '')
+        
+        # Handle backdrop/fanart
+        backdrop_path = series_data.get('backdrop_path', [])
+        fanart = backdrop_path[0] if isinstance(backdrop_path, list) and backdrop_path else ''
         
         # Convert rating from 5-based to 10-based if needed
         if rating and str(rating_5based := series_data.get('rating_5based')):
@@ -220,6 +268,10 @@ class FileManager:
         
         if cover:
             nfo += f'  <thumb>{cover}</thumb>\n'
+        
+        if fanart:
+            nfo += f'  <fanart><thumb>{fanart}</thumb></fanart>\n'
+        elif cover:
             nfo += f'  <fanart><thumb>{cover}</thumb></fanart>\n'
         
         nfo += '</tvshow>'

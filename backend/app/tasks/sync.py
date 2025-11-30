@@ -18,6 +18,13 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscription_id: int):
+    # Get settings
+    from app.models.settings import SettingsModel
+    settings = {s.key: s.value for s in db.query(SettingsModel).all()}
+    prefix_regex = settings.get("PREFIX_REGEX")
+    format_date = settings.get("FORMAT_DATE_IN_TITLE") == "true"
+    clean_name = settings.get("CLEAN_NAME") == "true"
+
     # Update status
     sync_state = db.query(SyncState).filter(
         SyncState.subscription_id == subscription_id,
@@ -128,7 +135,7 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             
             # Always create NFO file with all available metadata
             nfo_path = f"{cat_dir}/{safe_name}.nfo"
-            nfo_content = fm.generate_movie_nfo(movie)
+            nfo_content = fm.generate_movie_nfo(movie, prefix_regex, format_date, clean_name)
             await fm.write_nfo(nfo_path, nfo_content)
 
             # Update Cache
@@ -171,7 +178,7 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
 
                 cat_dir = f"{fm.output_dir}/{safe_cat}"
                 fm.ensure_directory(cat_dir)
-                nfo_content = fm.generate_movie_nfo(movie)
+                nfo_content = fm.generate_movie_nfo(movie, prefix_regex, format_date, clean_name)
                 await fm.write_nfo(nfo_path, nfo_content)
                 nfo_created_count += 1
         
@@ -191,6 +198,13 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
         raise
 
 async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscription_id: int):
+    # Get settings
+    from app.models.settings import SettingsModel
+    settings = {s.key: s.value for s in db.query(SettingsModel).all()}
+    prefix_regex = settings.get("PREFIX_REGEX")
+    format_date = settings.get("FORMAT_DATE_IN_TITLE") == "true"
+    clean_name = settings.get("CLEAN_NAME") == "true"
+
     # Update status
     sync_state = db.query(SyncState).filter(
         SyncState.subscription_id == subscription_id,
@@ -274,6 +288,10 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             series_info = info_response.get('info', {})
             episodes_data = info_response.get('episodes', {})
             
+            # Fix: Handle case where API returns empty list [] instead of dict {}
+            if isinstance(episodes_data, list):
+                episodes_data = {}
+            
             # PERFORMANCE: Use TMDB ID from get_series() list instead
             # The series dict already has metadata from the list call
             # if series_info.get('tmdb_id'):
@@ -282,7 +300,7 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
 
             # Always create tvshow.nfo
             nfo_path = f"{series_dir}/tvshow.nfo"
-            await fm.write_nfo(nfo_path, fm.generate_show_nfo(series))
+            await fm.write_nfo(nfo_path, fm.generate_show_nfo(series, prefix_regex, format_date, clean_name))
             
             for season_key, episodes in episodes_data.items():
                 season_num = int(season_key)
@@ -343,7 +361,7 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
                 #     except Exception:
                 #         pass
 
-                await fm.write_nfo(tvshow_nfo_path, fm.generate_show_nfo(series))
+                await fm.write_nfo(tvshow_nfo_path, fm.generate_show_nfo(series, prefix_regex, format_date, clean_name))
                 nfo_created_count += 1
         
         if nfo_created_count > 0:

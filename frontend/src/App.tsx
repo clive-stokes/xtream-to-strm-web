@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Settings, FileText, Activity, Tv, Radio, ChevronDown, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { LayoutDashboard, Settings, FileText, Activity, Tv, Radio, ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -21,14 +21,48 @@ function Layout({ children }: { children: React.ReactNode }) {
     const location = useLocation();
     const [xtreamExpanded, setXtreamExpanded] = useState(true);
     const [m3uExpanded, setM3uExpanded] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const isXtreamActive = location.pathname.startsWith('/xtreamtv');
     const isM3UActive = location.pathname.startsWith('/m3u');
 
+    // Close sidebar when route changes on mobile
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [location.pathname]);
+
+    // Close sidebar when clicking outside on mobile
+    const handleOverlayClick = () => {
+        setSidebarOpen(false);
+    };
+
     return (
-        <div className="min-h-screen bg-background text-foreground flex">
+        <div className="min-h-screen bg-background text-foreground flex relative">
+            {/* Mobile Menu Button */}
+            <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-card border border-border shadow-lg"
+                aria-label="Toggle menu"
+            >
+                {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+
+            {/* Mobile Overlay */}
+            {sidebarOpen && (
+                <div
+                    className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+                    onClick={handleOverlayClick}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-64 border-r border-border bg-card p-4 flex flex-col">
+            <aside className={`
+                w-64 border-r border-border bg-card p-4 flex flex-col
+                fixed lg:relative inset-y-0 left-0 z-40
+                transform transition-transform duration-300 ease-in-out
+                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                lg:translate-x-0
+            `}>
                 <div className="mb-8">
                     <h1 className="text-2xl font-bold text-primary">Xtream2STRM</h1>
                 </div>
@@ -148,13 +182,13 @@ function Layout({ children }: { children: React.ReactNode }) {
                 <div className="mt-auto pt-4 border-t border-border">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground px-3">
                         <Activity size={16} />
-                        <span>v1.1.0</span>
+                        <span>v2.5.0</span>
                     </div>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 p-8 overflow-auto">
+            <main className="flex-1 p-4 lg:p-8 overflow-auto w-full lg:w-auto pt-16 lg:pt-8">
                 {children}
             </main>
         </div>

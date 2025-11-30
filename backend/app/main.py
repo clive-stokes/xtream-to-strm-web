@@ -13,6 +13,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
+    version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
@@ -25,8 +26,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
-
 # Serve frontend static files
 static_dir = "/app/static"
 # Check for local development path
@@ -37,22 +36,25 @@ if not os.path.exists(static_dir):
 
 if os.path.exists(static_dir):
     app.mount("/assets", StaticFiles(directory=f"{static_dir}/assets"), name="assets")
-    
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        # Serve API routes first
-        if full_path.startswith("api/"):
-            return {"error": "Not found"}
-        
-        # Serve index.html for all other routes (SPA)
-        file_path = f"{static_dir}/{full_path}" if full_path else f"{static_dir}/index.html"
-        
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        else:
-            return FileResponse(f"{static_dir}/index.html")
+
+# Include API router
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
+# Serve SPA for 404 errors (except API routes)
+if os.path.exists(static_dir):
+    from fastapi import Request
+    from fastapi.exceptions import HTTPException
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    
+    @app.exception_handler(404)
+    async def custom_404_handler(request: Request, exc):
+        # If it's an API route, return JSON 404
+        if request.url.path.startswith(settings.API_V1_STR):
+            return {"detail": "Not found"}
+        
+        # Otherwise serve the SPA
+        return FileResponse(f"{static_dir}/index.html")

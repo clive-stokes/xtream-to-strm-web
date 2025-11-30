@@ -27,6 +27,12 @@ def update_config(config: ConfigUpdate, db: Session = Depends(get_db)):
         updates["MOVIES_DIR"] = config.MOVIES_DIR
     if config.SERIES_DIR is not None:
         updates["SERIES_DIR"] = config.SERIES_DIR
+    if config.PREFIX_REGEX is not None:
+        updates["PREFIX_REGEX"] = config.PREFIX_REGEX
+    if config.FORMAT_DATE_IN_TITLE is not None:
+        updates["FORMAT_DATE_IN_TITLE"] = str(config.FORMAT_DATE_IN_TITLE).lower()
+    if config.CLEAN_NAME is not None:
+        updates["CLEAN_NAME"] = str(config.CLEAN_NAME).lower()
     
     for key, value in updates.items():
         setting = db.query(SettingsModel).filter(SettingsModel.key == key).first()

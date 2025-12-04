@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Xtream to STRM Logo](frontend/public/logo.png)
+![Xtream to STRM Logo](frontend/public/Xtreamm-app_Full_Logo.jpg)
 
 **A modern web application for managing Xtream Codes and M3U playlists**  
 Generate Jellyfin-compatible `.strm` and `.nfo` files for your media server

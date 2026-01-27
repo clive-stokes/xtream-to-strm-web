@@ -7,6 +7,18 @@ class FileManager:
     def __init__(self, output_dir: str):
         self.output_dir = output_dir
 
+    def format_tmdb_suffix(self, tmdb_id) -> str:
+        """Return ' {tmdb-XXXXX}' if valid TMDB ID, else empty string"""
+        if tmdb_id:
+            tmdb_str = str(tmdb_id).strip()
+            if tmdb_str and tmdb_str.lower() not in ['null', 'none', '0', '']:
+                try:
+                    if int(tmdb_str) > 0:
+                        return f" {{tmdb-{tmdb_str}}}"
+                except (ValueError, TypeError):
+                    pass
+        return ""
+
     def sanitize_name(self, name: str) -> str:
         # Replace invalid characters with underscore
         sanitized = re.sub(r'[\\/:*?"<>|]', '_', name)

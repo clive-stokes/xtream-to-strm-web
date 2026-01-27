@@ -74,7 +74,9 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             if not cached:
                 to_add_update.append(movie)
             else:
-                if cached.name != movie['name'] or cached.container_extension != movie['container_extension']:
+                if (cached.name != movie['name'] or
+                        cached.container_extension != movie['container_extension'] or
+                        cached.tmdb_id != str(movie.get('tmdb', '') or '')):
                     to_add_update.append(movie)
 
         # Detect deletions
@@ -87,14 +89,19 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cat_name = cat_map.get(movie.category_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(movie.name)
-            
-            path = f"{fm.output_dir}/{safe_cat}/{safe_name}.strm"
-            nfo_path = f"{fm.output_dir}/{safe_cat}/{safe_name}.nfo"
-            
-            await fm.delete_file(path)
-            await fm.delete_file(nfo_path)
+            tmdb_suffix = fm.format_tmdb_suffix(movie.tmdb_id)
+
+            if tmdb_suffix:
+                # Folder-based: {cat}/{name} {tmdb-XXX}/
+                folder_path = f"{fm.output_dir}/{safe_cat}/{safe_name}{tmdb_suffix}"
+                if os.path.exists(folder_path):
+                    shutil.rmtree(folder_path)
+            else:
+                # Flat: {cat}/{name}.strm
+                await fm.delete_file(f"{fm.output_dir}/{safe_cat}/{safe_name}.strm")
+                await fm.delete_file(f"{fm.output_dir}/{safe_cat}/{safe_name}.nfo")
+
             await fm.delete_directory_if_empty(f"{fm.output_dir}/{safe_cat}")
-            
             db.delete(movie)
         
         # Process Additions/Updates
@@ -124,19 +131,41 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(name)
-            
+            tmdb_suffix = fm.format_tmdb_suffix(tmdb_id)
+
             cat_dir = f"{fm.output_dir}/{safe_cat}"
             fm.ensure_directory(cat_dir)
-            
-            strm_path = f"{cat_dir}/{safe_name}.strm"
+
+            if tmdb_suffix:
+                # Per-movie folder with TMDB ID
+                movie_dir = f"{cat_dir}/{safe_name}{tmdb_suffix}"
+                fm.ensure_directory(movie_dir)
+                display_name = f"{safe_name}{tmdb_suffix}"
+                strm_path = f"{movie_dir}/{display_name}.strm"
+                nfo_path = f"{movie_dir}/{display_name}.nfo"
+            else:
+                # Flat structure (no valid TMDB)
+                strm_path = f"{cat_dir}/{safe_name}.strm"
+                nfo_path = f"{cat_dir}/{safe_name}.nfo"
+
             url = xc.get_stream_url("movie", str(stream_id), ext)
-            
             await fm.write_strm(strm_path, url)
-            
+
             # Always create NFO file with all available metadata
-            nfo_path = f"{cat_dir}/{safe_name}.nfo"
             nfo_content = fm.generate_movie_nfo(movie, prefix_regex, format_date, clean_name)
             await fm.write_nfo(nfo_path, nfo_content)
+
+            # Clean up old path if TMDB ID changed
+            cached = cached_movies.get(stream_id)
+            if cached and cached.tmdb_id != (str(tmdb_id) if tmdb_id else None):
+                old_suffix = fm.format_tmdb_suffix(cached.tmdb_id)
+                if old_suffix:
+                    old_path = f"{cat_dir}/{safe_name}{old_suffix}"
+                    if os.path.exists(old_path):
+                        shutil.rmtree(old_path)
+                else:
+                    await fm.delete_file(f"{cat_dir}/{safe_name}.strm")
+                    await fm.delete_file(f"{cat_dir}/{safe_name}.nfo")
 
             # Update Cache
             cached = cached_movies.get(stream_id)
@@ -156,28 +185,23 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             stream_id = int(movie['stream_id'])
             name = movie['name']
             cat_id = movie['category_id']
-            
+            tmdb_id = movie.get('tmdb')
+
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(name)
-            
-            nfo_path = f"{fm.output_dir}/{safe_cat}/{safe_name}.nfo"
-            
-            if not os.path.exists(nfo_path):
-                # PERFORMANCE OPTIMIZATION: Disabled - use metadata from cache/list
-                # tmdb_id = movie.get('tmdb_id')
-                # if not tmdb_id or str(tmdb_id) in ['0', 'None', 'null', '']:
-                #     try:
-                #         detailed_info = await xc.get_vod_info(str(stream_id))
-                #         if detailed_info and 'info' in detailed_info:
-                #             fetched_tmdb = detailed_info['info'].get('tmdb_id')
-                #             if fetched_tmdb:
-                #                 movie['tmdb_id'] = fetched_tmdb
-                #     except Exception:
-                #         pass
+            tmdb_suffix = fm.format_tmdb_suffix(tmdb_id)
 
-                cat_dir = f"{fm.output_dir}/{safe_cat}"
-                fm.ensure_directory(cat_dir)
+            if tmdb_suffix:
+                nfo_path = f"{fm.output_dir}/{safe_cat}/{safe_name}{tmdb_suffix}/{safe_name}{tmdb_suffix}.nfo"
+            else:
+                nfo_path = f"{fm.output_dir}/{safe_cat}/{safe_name}.nfo"
+
+            if not os.path.exists(nfo_path):
+                if tmdb_suffix:
+                    fm.ensure_directory(f"{fm.output_dir}/{safe_cat}/{safe_name}{tmdb_suffix}")
+                else:
+                    fm.ensure_directory(f"{fm.output_dir}/{safe_cat}")
                 nfo_content = fm.generate_movie_nfo(movie, prefix_regex, format_date, clean_name)
                 await fm.write_nfo(nfo_path, nfo_content)
                 nfo_created_count += 1
@@ -249,7 +273,8 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             if not cached:
                 to_add_update.append(series)
             else:
-                if cached.name != series['name']:
+                if (cached.name != series['name'] or
+                        cached.tmdb_id != str(series.get('tmdb', '') or '')):
                     to_add_update.append(series)
 
         for series_id, cached in cached_series.items():
@@ -261,11 +286,12 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cat_name = cat_map.get(series.category_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(series.name)
-            
-            path = f"{fm.output_dir}/{safe_cat}/{safe_name}"
+            tmdb_suffix = fm.format_tmdb_suffix(series.tmdb_id)
+
+            path = f"{fm.output_dir}/{safe_cat}/{safe_name}{tmdb_suffix}"
             if os.path.exists(path):
                 shutil.rmtree(path)
-            
+
             await fm.delete_directory_if_empty(f"{fm.output_dir}/{safe_cat}")
             db.delete(series)
 
@@ -279,10 +305,20 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(name)
-            
-            series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}"
+            tmdb_suffix = fm.format_tmdb_suffix(tmdb_id)
+
+            series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}{tmdb_suffix}"
             fm.ensure_directory(series_dir)
-            
+
+            # Clean up old folder if TMDB ID changed
+            cached = cached_series.get(series_id)
+            if cached and cached.tmdb_id != (str(tmdb_id) if tmdb_id else None):
+                old_suffix = fm.format_tmdb_suffix(cached.tmdb_id)
+                old_name = fm.sanitize_name(cached.name)
+                old_path = f"{fm.output_dir}/{safe_cat}/{old_name}{old_suffix}"
+                if os.path.exists(old_path) and old_path != series_dir:
+                    shutil.rmtree(old_path)
+
             # Fetch Episodes and Info
             info_response = await xc.get_series_info(str(series_id))
             series_info = info_response.get('info', {})
@@ -345,22 +381,13 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
             safe_name = fm.sanitize_name(name)
-            
-            series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}"
-            tvshow_nfo_path = f"{series_dir}/tvshow.nfo"
-            
-            if os.path.exists(series_dir) and not os.path.exists(tvshow_nfo_path):
-                # PERFORMANCE OPTIMIZATION: Disabled - use metadata from cache/list
-                # tmdb_id = series.get('tmdb_id')
-                # if not tmdb_id or str(tmdb_id) in ['0', 'None', 'null', '']:
-                #     try:
-                #         info_response = await xc.get_series_info(str(series_id))
-                #         series_info = info_response.get('info', {})
-                #         if series_info.get('tmdb_id'):
-                #             series['tmdb_id'] = series_info['tmdb_id']
-                #     except Exception:
-                #         pass
+            tmdb_id = series.get('tmdb')
+            tmdb_suffix = fm.format_tmdb_suffix(tmdb_id)
 
+            series_dir = f"{fm.output_dir}/{safe_cat}/{safe_name}{tmdb_suffix}"
+            tvshow_nfo_path = f"{series_dir}/tvshow.nfo"
+
+            if os.path.exists(series_dir) and not os.path.exists(tvshow_nfo_path):
                 await fm.write_nfo(tvshow_nfo_path, fm.generate_show_nfo(series, prefix_regex, format_date, clean_name))
                 nfo_created_count += 1
         

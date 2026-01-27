@@ -22,6 +22,16 @@ Xtream to STRM is a complete, production-ready web application that transforms y
 
 Built with modern technologies, it provides an intuitive interface for managing your VOD content with advanced features like selective synchronization, intelligent metadata generation, and comprehensive administration tools.
 
+## Fork Changes
+
+This fork ([clive-stokes/xtream-to-strm-web](https://github.com/clive-stokes/xtream-to-strm-web)) adds the following over upstream:
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **HTTP Redirect Support** | Adds `follow_redirects=True` to the Xtream API client, fixing providers that return 301 redirects | `backend/app/services/xtream.py` |
+| **TMDB Folder Naming** | Appends `{tmdb-XXXXX}` to movie and series folder names when a valid TMDB ID is returned by the provider, enabling direct Jellyfin metadata matching instead of fuzzy name search | `backend/app/tasks/sync.py`, `backend/app/services/file_manager.py` |
+| **Per-Movie Folders** | Movies with TMDB IDs are placed in their own subdirectory (e.g., `Superman {tmdb-812583}/Superman {tmdb-812583}.strm`) following Jellyfin's recommended naming convention | `backend/app/tasks/sync.py` |
+
 ## ✨ Key Features
 
 ### 🎬 Multi-Source Support
@@ -138,15 +148,17 @@ Access these settings in **Administration** → **NFO Settings**
 ```
 output/
 ├── movies/
-│   └── Movie Name (2024)/
-│       ├── Movie Name (2024).strm
-│       └── Movie Name (2024).nfo
+│   └── Category Name/
+│       ├── Movie Name {tmdb-123456}/
+│       │   ├── Movie Name {tmdb-123456}.strm
+│       │   └── Movie Name {tmdb-123456}.nfo
+│       └── Movie Without TMDB.strm      # flat if no TMDB ID
 └── series/
-    └── Series Name/
-        ├── Season 01/
-        │   ├── Series Name S01E01.strm
-        │   └── Series Name S01E01.nfo
-        └── tvshow.nfo
+    └── Category Name/
+        └── Series Name {tmdb-654321}/
+            ├── tvshow.nfo
+            └── Season 01/
+                └── S01E01 - Episode Title.strm
 ```
 
 ## 🔧 Technology Stack

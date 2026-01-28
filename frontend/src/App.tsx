@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Settings, FileText, Activity, Tv, Radio, ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { ThemeToggle } from './components/ThemeToggle';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -180,9 +181,12 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </nav>
 
                 <div className="mt-auto pt-4 border-t border-border">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground px-3">
-                        <Activity size={16} />
-                        <span>v2.5.0</span>
+                    <div className="flex items-center justify-between px-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Activity size={16} />
+                            <span>v2.5.0</span>
+                        </div>
+                        <ThemeToggle />
                     </div>
                 </div>
             </aside>

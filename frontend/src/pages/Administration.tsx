@@ -11,15 +11,21 @@ export default function Administration() {
     const [formatDate, setFormatDate] = useState(false);
     const [cleanName, setCleanName] = useState(false);
     const [regexLoading, setRegexLoading] = useState(false);
+    // Series format settings
+    const [useSeasonFolders, setUseSeasonFolders] = useState(true);
+    const [includeSeriesName, setIncludeSeriesName] = useState(false);
 
     // Load current settings on mount
     useEffect(() => {
         const loadSettings = async () => {
             try {
-                const response = await api.get('/config');
+                const response = await api.get('/config/');
                 setPrefixRegex(response.data.PREFIX_REGEX || '^(?:[A-Za-z0-9.-]+_|[A-Za-z]{2,}\\s*-\\s*)');
                 setFormatDate(response.data.FORMAT_DATE_IN_TITLE === true);
                 setCleanName(response.data.CLEAN_NAME === true);
+                // Series format settings (default: season folders=true, series name=false)
+                setUseSeasonFolders(response.data.SERIES_USE_SEASON_FOLDERS !== false);
+                setIncludeSeriesName(response.data.SERIES_INCLUDE_NAME_IN_FILENAME === true);
             } catch (error) {
                 console.error('Failed to load settings', error);
             }
@@ -30,10 +36,12 @@ export default function Administration() {
     const saveNfoSettings = async () => {
         setRegexLoading(true);
         try {
-            await api.post('/config', {
+            await api.post('/config/', {
                 PREFIX_REGEX: prefixRegex,
                 FORMAT_DATE_IN_TITLE: formatDate,
-                CLEAN_NAME: cleanName
+                CLEAN_NAME: cleanName,
+                SERIES_USE_SEASON_FOLDERS: useSeasonFolders,
+                SERIES_INCLUDE_NAME_IN_FILENAME: includeSeriesName
             });
             alert('NFO settings saved successfully!');
         } catch (error) {
@@ -227,6 +235,47 @@ export default function Administration() {
                                     </label>
                                     <p className="text-xs text-muted-foreground mt-1">
                                         Replace all remaining underscores "_" with spaces
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Series Format Options */}
+                        <div className="space-y-4 pt-4 border-t">
+                            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Series Format</h4>
+
+                            <div className="flex items-start space-x-3">
+                                <input
+                                    type="checkbox"
+                                    id="useSeasonFolders"
+                                    checked={useSeasonFolders}
+                                    onChange={(e) => setUseSeasonFolders(e.target.checked)}
+                                    className="h-4 w-4 mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                    <label htmlFor="useSeasonFolders" className="text-sm font-medium leading-none cursor-pointer">
+                                        Use Season folders
+                                    </label>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Organize episodes into "Season 01", "Season 02" subfolders (recommended for Jellyfin)
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start space-x-3">
+                                <input
+                                    type="checkbox"
+                                    id="includeSeriesName"
+                                    checked={includeSeriesName}
+                                    onChange={(e) => setIncludeSeriesName(e.target.checked)}
+                                    className="h-4 w-4 mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                    <label htmlFor="includeSeriesName" className="text-sm font-medium leading-none cursor-pointer">
+                                        Include series name in filename
+                                    </label>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        E.g. "Series Name - S01E01 - Title.strm" instead of "S01E01 - Title.strm"
                                     </p>
                                 </div>
                             </div>

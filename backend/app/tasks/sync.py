@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shutil
 from app.core.celery_app import celery_app
 from sqlalchemy.orm import Session
@@ -228,6 +229,9 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
     prefix_regex = settings.get("PREFIX_REGEX")
     format_date = settings.get("FORMAT_DATE_IN_TITLE") == "true"
     clean_name = settings.get("CLEAN_NAME") == "true"
+    # Series format settings (defaults: season folders=true, series name in filename=false)
+    use_season_folders = settings.get("SERIES_USE_SEASON_FOLDERS", "true") != "false"
+    include_series_name = settings.get("SERIES_INCLUDE_NAME_IN_FILENAME", "false") == "true"
 
     # Update status
     sync_state = db.query(SyncState).filter(
@@ -340,25 +344,60 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             
             for season_key, episodes in episodes_data.items():
                 season_num = int(season_key)
-                season_dir = f"{series_dir}/Season {season_num}"
-                fm.ensure_directory(season_dir)
-                
+
+                # Determine episode directory based on settings
+                if use_season_folders:
+                    # Use zero-padded season numbers for Jellyfin compatibility (Season 01, not Season 1)
+                    episode_dir = f"{series_dir}/Season {season_num:02d}"
+                    fm.ensure_directory(episode_dir)
+                else:
+                    episode_dir = series_dir
+
                 for ep in episodes:
                     ep_num = int(ep['episode_num'])
                     ep_id = ep['id']
                     container = ep['container_extension']
                     title = ep.get('title', '')
-                    
+
+                    # Build filename based on settings
                     formatted_ep = f"S{season_num:02d}E{ep_num:02d}"
-                    if title:
-                        safe_title = fm.sanitize_name(title)
-                        filename = f"{formatted_ep} - {safe_title}"
+
+                    # Clean title: remove series name prefix and episode code if present
+                    clean_title = title
+                    if clean_title:
+                        # Remove series name prefix (case-insensitive)
+                        if clean_title.lower().startswith(name.lower()):
+                            clean_title = clean_title[len(name):].strip(' -:')
+                        # Remove episode code patterns like "S01E01 -" or "S01E01"
+                        clean_title = re.sub(r'^S\d{1,2}E\d{1,2}\s*[-:.]?\s*', '', clean_title, flags=re.IGNORECASE)
+                        # Also handle "1x01" format
+                        clean_title = re.sub(r'^\d{1,2}x\d{1,2}\s*[-:.]?\s*', '', clean_title, flags=re.IGNORECASE)
+                        clean_title = clean_title.strip(' -:')
+
+                    if include_series_name:
+                        # Jellyfin format: Show Name - S01E01 - Episode Title.strm
+                        if clean_title:
+                            safe_title = fm.sanitize_name(clean_title)
+                            filename = f"{safe_name} - {formatted_ep} - {safe_title}"
+                        else:
+                            filename = f"{safe_name} - {formatted_ep}"
                     else:
-                        filename = formatted_ep
-                    
-                    strm_path = f"{season_dir}/{filename}.strm"
+                        # Default: S01E01 - Episode Title.strm
+                        if clean_title:
+                            safe_title = fm.sanitize_name(clean_title)
+                            filename = f"{formatted_ep} - {safe_title}"
+                        else:
+                            filename = formatted_ep
+
+                    strm_path = f"{episode_dir}/{filename}.strm"
                     url = xc.get_stream_url("series", str(ep_id), container)
                     await fm.write_strm(strm_path, url)
+
+                    # Generate episode NFO
+                    nfo_path = f"{episode_dir}/{filename}.nfo"
+                    await fm.write_nfo(nfo_path, fm.generate_episode_nfo(
+                        ep, name, season_num, ep_num, prefix_regex, format_date, clean_name
+                    ))
 
             # Update Cache
             cached = cached_series.get(series_id)

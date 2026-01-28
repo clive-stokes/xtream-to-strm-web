@@ -24,13 +24,144 @@ Built with modern technologies, it provides an intuitive interface for managing 
 
 ## Fork Changes
 
-This fork ([clive-stokes/xtream-to-strm-web](https://github.com/clive-stokes/xtream-to-strm-web)) adds the following over upstream:
+This fork ([clive-stokes/xtream-to-strm-web](https://github.com/clive-stokes/xtream-to-strm-web)) adds the following enhancements over upstream:
+
+### Core Improvements
 
 | Change | Description | Files Modified |
 |--------|-------------|----------------|
 | **HTTP Redirect Support** | Adds `follow_redirects=True` to the Xtream API client, fixing providers that return 301 redirects | `backend/app/services/xtream.py` |
 | **TMDB Folder Naming** | Appends `{tmdb-XXXXX}` to movie and series folder names when a valid TMDB ID is returned by the provider, enabling direct Jellyfin metadata matching instead of fuzzy name search | `backend/app/tasks/sync.py`, `backend/app/services/file_manager.py` |
 | **Per-Movie Folders** | Movies with TMDB IDs are placed in their own subdirectory (e.g., `Superman {tmdb-812583}/Superman {tmdb-812583}.strm`) following Jellyfin's recommended naming convention | `backend/app/tasks/sync.py` |
+
+### Enhanced NFO Generation
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **Full Metadata NFOs** | NFO files now always include complete metadata (title, plot, year, genres, cast, ratings) alongside TMDB ID, not just the TMDB reference | `backend/app/services/file_manager.py` |
+| **Episode NFO Generation** | Generates `<episodedetails>` NFO files for each episode with title, season/episode numbers, runtime, and stream details | `backend/app/services/file_manager.py`, `backend/app/tasks/sync.py` |
+| **Kodi/Jellyfin Ratings Format** | NFOs include `<ratings>` block with TMDB rating in Kodi-compatible format | `backend/app/services/file_manager.py` |
+| **User Rating Support** | Adds `<userrating>` element with integer rating (1-10 scale) | `backend/app/services/file_manager.py` |
+| **MPAA Content Rating** | Adds `<mpaa>` element for content ratings when available | `backend/app/services/file_manager.py` |
+| **Multiple Unique IDs** | NFOs include both `<uniqueid type="tmdb">` and `<uniqueid type="imdb">` when available | `backend/app/services/file_manager.py` |
+| **Genre Separator Handling** | Genres are properly split on both comma and slash separators | `backend/app/services/file_manager.py` |
+
+### Series Format Options
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **Configurable Season Folders** | New setting `SERIES_USE_SEASON_FOLDERS` (default: true) - organize episodes into `Season XX` subfolders or keep flat | `backend/app/schemas.py`, `backend/app/tasks/sync.py` |
+| **Series Name in Filename** | New setting `SERIES_INCLUDE_NAME_IN_FILENAME` (default: false) - prefix episode files with series name (e.g., `Series Name - S01E01 - Title.strm`) | `backend/app/schemas.py`, `backend/app/tasks/sync.py` |
+| **Zero-Padded Season Folders** | Season folders use two-digit padding (`Season 01` not `Season 1`) for proper sorting | `backend/app/tasks/sync.py` |
+| **Episode Title Cleaning** | Removes series name prefix and duplicate episode codes from provider titles to prevent filenames like `S01E01 - Show - S01E01 - Title.strm` | `backend/app/tasks/sync.py` |
+| **Administration UI** | New checkboxes in Administration page for series format settings | `frontend/src/pages/Administration.tsx` |
+
+### Admin & Cache Management
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **Clear Movie Cache** | New endpoint `/admin/clear-movie-cache` to delete movie cache without affecting series | `backend/app/api/endpoints/admin.py` |
+| **Clear Series Cache** | New endpoint `/admin/clear-series-cache` to delete series and episode cache without affecting movies | `backend/app/api/endpoints/admin.py` |
+| **Defensive Episode Parsing** | Handles edge cases where Xtream API returns episode data as list instead of dict | `backend/app/services/file_manager.py` |
+
+### NFO Format Details
+
+**Movie NFO** (`movie.nfo`):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Movie Title</title>
+  <originaltitle>Original Title</originaltitle>
+  <year>2024</year>
+  <plot>Movie description...</plot>
+  <runtime>120</runtime>
+  <mpaa>PG-13</mpaa>
+  <genre>Action</genre>
+  <genre>Drama</genre>
+  <director>Director Name</director>
+  <actor><name>Actor Name</name></actor>
+  <ratings>
+    <rating name="tmdb" default="true"><value>7.5</value></rating>
+  </ratings>
+  <userrating>8</userrating>
+  <uniqueid type="tmdb" default="true">123456</uniqueid>
+  <uniqueid type="imdb">tt1234567</uniqueid>
+</movie>
+```
+
+**TV Show NFO** (`tvshow.nfo`):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Series Title</title>
+  <year>2024</year>
+  <plot>Series description...</plot>
+  <genre>Drama</genre>
+  <ratings>
+    <rating name="tmdb" default="true"><value>8.2</value></rating>
+  </ratings>
+  <userrating>9</userrating>
+  <mpaa>TV-MA</mpaa>
+  <uniqueid type="tmdb" default="true">654321</uniqueid>
+  <uniqueid type="imdb">tt7654321</uniqueid>
+</tvshow>
+```
+
+**Episode NFO** (`S01E01 - Title.nfo`):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<episodedetails>
+  <title>Episode Title</title>
+  <showtitle>Series Name</showtitle>
+  <season>1</season>
+  <episode>1</episode>
+  <runtime>45</runtime>
+  <plot>Episode description...</plot>
+  <fileinfo>
+    <streamdetails>
+      <video>
+        <codec>h264</codec>
+        <width>1920</width>
+        <height>1080</height>
+      </video>
+      <audio>
+        <codec>aac</codec>
+        <channels>2</channels>
+      </audio>
+    </streamdetails>
+  </fileinfo>
+</episodedetails>
+```
+
+### Series Format Examples
+
+With default settings (`SERIES_USE_SEASON_FOLDERS=true`, `SERIES_INCLUDE_NAME_IN_FILENAME=false`):
+```
+Series Name {tmdb-123456}/
+├── tvshow.nfo
+├── Season 01/
+│   ├── S01E01 - Episode Title.strm
+│   └── S01E01 - Episode Title.nfo
+└── Season 02/
+    └── S02E01 - Another Episode.strm
+```
+
+With flat structure (`SERIES_USE_SEASON_FOLDERS=false`):
+```
+Series Name {tmdb-123456}/
+├── tvshow.nfo
+├── S01E01 - Episode Title.strm
+├── S01E01 - Episode Title.nfo
+└── S02E01 - Another Episode.strm
+```
+
+With series name prefix (`SERIES_INCLUDE_NAME_IN_FILENAME=true`):
+```
+Series Name {tmdb-123456}/
+├── tvshow.nfo
+└── Season 01/
+    └── Series Name - S01E01 - Episode Title.strm
+```
 
 ## ✨ Key Features
 

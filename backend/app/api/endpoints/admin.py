@@ -89,6 +89,40 @@ def delete_generated_files(db: Session = Depends(get_db)):
         return {"message": f"Error deleting files: {str(e)}", "success": False}
 
 
+@router.post("/clear-movie-cache")
+def clear_movie_cache(db: Session = Depends(get_db)):
+    """Clear movie cache from database - movies will be re-synced on next sync"""
+    try:
+        count = db.query(MovieCache).delete()
+        db.commit()
+        return {
+            "message": f"Movie cache cleared successfully ({count} entries removed)",
+            "deleted_count": count,
+            "success": True
+        }
+    except Exception as e:
+        db.rollback()
+        return {"message": f"Error clearing movie cache: {str(e)}", "success": False}
+
+
+@router.post("/clear-series-cache")
+def clear_series_cache(db: Session = Depends(get_db)):
+    """Clear series cache from database - series will be re-synced on next sync"""
+    try:
+        episode_count = db.query(EpisodeCache).delete()
+        series_count = db.query(SeriesCache).delete()
+        db.commit()
+        return {
+            "message": f"Series cache cleared ({series_count} series, {episode_count} episodes removed)",
+            "series_deleted": series_count,
+            "episodes_deleted": episode_count,
+            "success": True
+        }
+    except Exception as e:
+        db.rollback()
+        return {"message": f"Error clearing series cache: {str(e)}", "success": False}
+
+
 @router.post("/reset-database")
 def reset_database(db: Session = Depends(get_db)):
     """Clear all data from database tables"""

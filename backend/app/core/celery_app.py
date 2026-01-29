@@ -1,5 +1,10 @@
 from celery import Celery
 from app.core.config import settings
+import logging
+
+# Suppress verbose httpx logging (HTTP Request, 301 Moved Permanently, etc.)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 celery_app = Celery("worker", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 

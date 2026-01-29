@@ -7,6 +7,11 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine
 import os
+import logging
+
+# Suppress verbose httpx logging (HTTP Request, 301 Moved Permanently, etc.)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # Create tables
 Base.metadata.create_all(bind=engine)

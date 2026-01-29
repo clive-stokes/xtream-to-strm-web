@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Tv, Activity, HardDrive } from 'lucide-react';
+import { Film, Tv, Activity, HardDrive, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 
 interface DashboardStats {
@@ -21,13 +21,28 @@ interface DashboardStats {
     };
 }
 
+interface SyncProgress {
+    subscription_id: number;
+    type: string;
+    status: string;
+    progress_current: number;
+    progress_total: number;
+    progress_phase: string | null;
+}
+
 export default function Dashboard() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [activeSync, setActiveSync] = useState<SyncProgress[]>([]);
 
     const fetchData = async () => {
         try {
             const statsRes = await api.get<DashboardStats>('/dashboard/stats');
             setStats(statsRes.data);
+
+            // Fetch active sync progress
+            const syncRes = await api.get<SyncProgress[]>('/sync/status');
+            const running = syncRes.data.filter(s => s.status === 'running');
+            setActiveSync(running);
         } catch (error) {
             console.error("Failed to fetch dashboard data", error);
         }
@@ -35,7 +50,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 5000);
+        const interval = setInterval(fetchData, 2000); // Poll every 2s for progress updates
         return () => clearInterval(interval);
     }, []);
 
@@ -93,26 +108,51 @@ export default function Dashboard() {
                         <CardTitle>Sync Status</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-8">
-                            <div className="flex items-center">
-                                <Activity className="mr-2 h-4 w-4 opacity-70" />
-                                <div className="ml-4 space-y-1">
-                                    <p className="text-sm font-medium leading-none">In Progress</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {stats?.sync_status?.in_progress || 0} active sync tasks
-                                    </p>
+                        <div className="space-y-6">
+                            {/* Active Sync Progress */}
+                            {activeSync.length > 0 ? (
+                                activeSync.map((sync) => {
+                                    const percent = sync.progress_total > 0
+                                        ? Math.round((sync.progress_current / sync.progress_total) * 100)
+                                        : 0;
+                                    return (
+                                        <div key={`${sync.subscription_id}-${sync.type}`} className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                                    <span className="text-sm font-medium capitalize">{sync.type} Sync</span>
+                                                </div>
+                                                <span className="text-sm font-medium text-blue-500">{percent}%</span>
+                                            </div>
+                                            <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-blue-500 transition-all duration-300"
+                                                    style={{ width: `${percent}%` }}
+                                                />
+                                            </div>
+                                            <div className="flex justify-between text-xs text-muted-foreground">
+                                                <span>{sync.progress_phase || 'Processing...'}</span>
+                                                <span>{sync.progress_current.toLocaleString()} / {sync.progress_total.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="flex items-center">
+                                    <Activity className="mr-2 h-4 w-4 opacity-70" />
+                                    <div className="ml-4 space-y-1">
+                                        <p className="text-sm font-medium leading-none">Status</p>
+                                        <p className="text-sm text-muted-foreground">No active sync tasks</p>
+                                    </div>
+                                    <div className="ml-auto font-medium text-green-500">Idle</div>
                                 </div>
-                                <div className="ml-auto font-medium">
-                                    {stats?.sync_status?.in_progress === 0 ? 'Idle' : 'Running'}
-                                </div>
-                            </div>
-                            <div className="flex items-center">
+                            )}
+
+                            <div className="flex items-center pt-2 border-t">
                                 <Activity className="mr-2 h-4 w-4 opacity-70" />
                                 <div className="ml-4 space-y-1">
                                     <p className="text-sm font-medium leading-none">Success Rate</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Last 24 hours
-                                    </p>
+                                    <p className="text-sm text-muted-foreground">Last 24 hours</p>
                                 </div>
                                 <div className="ml-auto font-medium text-green-500">
                                     {stats?.sync_status?.success_rate || 100}%
@@ -122,9 +162,7 @@ export default function Dashboard() {
                                 <Activity className="mr-2 h-4 w-4 opacity-70" />
                                 <div className="ml-4 space-y-1">
                                     <p className="text-sm font-medium leading-none">Errors</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Last 24 hours
-                                    </p>
+                                    <p className="text-sm text-muted-foreground">Last 24 hours</p>
                                 </div>
                                 <div className="ml-auto font-medium text-red-500">
                                     {stats?.sync_status?.errors_24h || 0}

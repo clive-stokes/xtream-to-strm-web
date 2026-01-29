@@ -125,27 +125,23 @@ def clear_series_cache(db: Session = Depends(get_db)):
 
 @router.post("/reset-database")
 def reset_database(db: Session = Depends(get_db)):
-    """Clear all data from database tables"""
+    """Clear sync data from database while preserving subscriptions and selections"""
     try:
-        # Delete all records from each table in the correct order (dependencies first)
+        # Delete sync-related records (preserve subscriptions and selections)
         db.query(ScheduleExecution).delete()
         db.query(Schedule).delete()
         db.query(EpisodeCache).delete()
         db.query(SeriesCache).delete()
         db.query(MovieCache).delete()
-        db.query(SelectedCategory).delete()
         db.query(SyncState).delete()
-        db.query(Subscription).delete()
-        
-        # Delete M3U related tables
-        db.query(M3USelection).delete()
+
+        # Delete M3U entries (preserve sources and selections)
         db.query(M3UEntry).delete()
-        db.query(M3USource).delete()
-        
+
         db.commit()
-        
+
         return {
-            "message": "Database reset successfully",
+            "message": "Database reset successfully (subscriptions and selections preserved)",
             "success": True
         }
     except Exception as e:

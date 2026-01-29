@@ -25,3 +25,7 @@ class SyncState(Base):
     items_deleted = Column(Integer, nullable=False, default=0)
     error_message = Column(String, nullable=True)
     task_id = Column(String, nullable=True)  # Celery task ID for cancellation
+    # Progress tracking
+    progress_current = Column(Integer, nullable=False, default=0)
+    progress_total = Column(Integer, nullable=False, default=0)
+    progress_phase = Column(String, nullable=True)  # e.g., "Fetching VOD details", "Creating files"

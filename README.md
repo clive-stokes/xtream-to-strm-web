@@ -62,7 +62,32 @@ This fork ([clive-stokes/xtream-to-strm-web](https://github.com/clive-stokes/xtr
 |--------|-------------|----------------|
 | **Clear Movie Cache** | New endpoint `/admin/clear-movie-cache` to delete movie cache without affecting series | `backend/app/api/endpoints/admin.py` |
 | **Clear Series Cache** | New endpoint `/admin/clear-series-cache` to delete series and episode cache without affecting movies | `backend/app/api/endpoints/admin.py` |
+| **Reset Database (Preserves Config)** | Reset now preserves subscriptions and selections, only clears sync cache data | `backend/app/api/endpoints/admin.py` |
 | **Defensive Episode Parsing** | Handles edge cases where Xtream API returns episode data as list instead of dict | `backend/app/services/file_manager.py` |
+
+### Performance & Infrastructure
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **Non-Root Container** | Container runs as user 1000:100 for better security and volume permissions | `Dockerfile.single`, `docker_start.sh` |
+| **Parallel VOD Fetching** | Fetches detailed VOD info with 10 concurrent requests, reducing initial sync from ~25 hours to ~2-3 hours for large libraries | `backend/app/tasks/sync.py` |
+| **Reduced Logging** | Suppresses verbose httpx HTTP request logs, keeping only progress messages | `backend/app/main.py`, `backend/app/core/celery_app.py` |
+
+### Stream Details in NFO
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **Video Stream Details** | NFO files include `<fileinfo><streamdetails>` with video codec, resolution, aspect ratio, duration, and bitrate | `backend/app/services/file_manager.py` |
+| **Audio Stream Details** | Includes audio codec, channels, sample rate, layout, and language when available from provider | `backend/app/services/file_manager.py` |
+| **Parallel Detail Fetching** | Fetches detailed info via `get_vod_info()` API for each movie during sync | `backend/app/tasks/sync.py` |
+
+### UI Improvements
+
+| Change | Description | Files Modified |
+|--------|-------------|----------------|
+| **Sync Progress Display** | Dashboard shows real-time sync progress with percentage, progress bar, phase, and item counts | `frontend/src/pages/Dashboard.tsx` |
+| **Fixed Logs Page** | Fixed authentication token handling for live logs streaming | `frontend/src/pages/Logs.tsx` |
+| **Progress API** | New fields in sync status API: `progress_current`, `progress_total`, `progress_phase` | `backend/app/schemas.py`, `backend/app/api/endpoints/sync.py`, `backend/app/models/sync_state.py` |
 
 ### NFO Format Details
 
@@ -86,6 +111,24 @@ This fork ([clive-stokes/xtream-to-strm-web](https://github.com/clive-stokes/xtr
   <userrating>8</userrating>
   <uniqueid type="tmdb" default="true">123456</uniqueid>
   <uniqueid type="imdb">tt1234567</uniqueid>
+  <fileinfo>
+    <streamdetails>
+      <video>
+        <codec>hevc</codec>
+        <width>3840</width>
+        <height>2160</height>
+        <aspect>16:9</aspect>
+        <durationinseconds>7260</durationinseconds>
+        <bitrate>12500</bitrate>
+      </video>
+      <audio>
+        <codec>eac3</codec>
+        <channels>6</channels>
+        <samplerate>48000</samplerate>
+        <language>eng</language>
+      </audio>
+    </streamdetails>
+  </fileinfo>
 </movie>
 ```
 

@@ -29,11 +29,20 @@ COPY backend/ .
 # Copy frontend build from stage 1
 COPY --from=frontend-build /app/dist /app/static
 
-# Copy startup script  
+# Copy startup script
 COPY docker_start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
+# Create non-root user (UID 1000, GID 100 = users)
+RUN groupadd -g 100 -o users || true && \
+    useradd -u 1000 -g 100 -m -s /bin/bash appuser && \
+    mkdir -p /db /output && \
+    chown -R 1000:100 /app /db /output
+
 # Expose port
 EXPOSE 8000
+
+# Switch to non-root user
+USER 1000:100
 
 CMD ["/app/start.sh"]

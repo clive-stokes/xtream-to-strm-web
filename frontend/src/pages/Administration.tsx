@@ -107,7 +107,7 @@ export default function Administration() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                            Clear all data from the database (subscriptions, sync states, selections, etc.).
+                            Clear sync data (caches, schedules, sync states). Subscriptions and selections are preserved.
                         </p>
                         <Button
                             variant="destructive"

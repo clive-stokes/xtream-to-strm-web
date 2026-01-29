@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import shutil
+from asyncio import Semaphore
 from app.core.celery_app import celery_app
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
@@ -17,6 +18,71 @@ import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def update_sync_progress(db: Session, subscription_id: int, sync_type: str, current: int, total: int, phase: str):
+    """Update sync progress in database"""
+    sync_state = db.query(SyncState).filter(
+        SyncState.subscription_id == subscription_id,
+        SyncState.type == sync_type
+    ).first()
+    if sync_state:
+        sync_state.progress_current = current
+        sync_state.progress_total = total
+        sync_state.progress_phase = phase
+        db.commit()
+
+
+async def fetch_vod_details_batch(xc: XtreamClient, movies: list, batch_size: int = 10,
+                                   db: Session = None, subscription_id: int = None):
+    """Fetch VOD details for multiple movies in parallel with concurrency limit"""
+    semaphore = Semaphore(batch_size)
+    total = len(movies)
+    completed = [0]  # Use list for mutable counter in closure
+
+    async def fetch_one(movie):
+        async with semaphore:
+            stream_id = str(movie['stream_id'])
+            try:
+                detailed_info = await xc.get_vod_info(stream_id)
+                if detailed_info and 'info' in detailed_info:
+                    info = detailed_info['info']
+                    # Merge video/audio/metadata into movie dict
+                    if info.get('video'):
+                        movie['video'] = info['video']
+                    if info.get('audio'):
+                        movie['audio'] = info['audio']
+                    if info.get('bitrate'):
+                        movie['bitrate'] = info['bitrate']
+                    if info.get('duration_secs'):
+                        movie['duration_secs'] = info['duration_secs']
+                    # Additional metadata
+                    if info.get('plot') and not movie.get('plot'):
+                        movie['plot'] = info['plot']
+                    if info.get('cast') and not movie.get('cast'):
+                        movie['cast'] = info['cast']
+                    if info.get('director') and not movie.get('director'):
+                        movie['director'] = info['director']
+                    if info.get('genre') and not movie.get('genre'):
+                        movie['genre'] = info['genre']
+                    if info.get('release_date') and not movie.get('releasedate'):
+                        movie['releasedate'] = info['release_date']
+                    if info.get('tmdb_id') and not movie.get('tmdb'):
+                        movie['tmdb'] = info['tmdb_id']
+            except Exception as e:
+                logger.warning(f"Failed to fetch details for movie {stream_id}: {e}")
+
+            completed[0] += 1
+            if completed[0] % 100 == 0 or completed[0] == total:
+                logger.info(f"Fetched VOD details: {completed[0]}/{total}")
+                # Update progress in database
+                if db and subscription_id:
+                    update_sync_progress(db, subscription_id, SyncType.MOVIES, completed[0], total, "Fetching VOD details")
+
+        return movie
+
+    tasks = [fetch_one(movie) for movie in movies]
+    return await asyncio.gather(*tasks)
 
 async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscription_id: int):
     # Get settings
@@ -105,29 +171,22 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
             await fm.delete_directory_if_empty(f"{fm.output_dir}/{safe_cat}")
             db.delete(movie)
         
-        # Process Additions/Updates
-        for movie in to_add_update:
+        # Fetch VOD details in parallel (10 concurrent requests)
+        if to_add_update:
+            logger.info(f"Fetching detailed VOD info for {len(to_add_update)} movies (parallel)...")
+            update_sync_progress(db, subscription_id, SyncType.MOVIES, 0, len(to_add_update), "Fetching VOD details")
+            await fetch_vod_details_batch(xc, to_add_update, batch_size=10, db=db, subscription_id=subscription_id)
+
+        # Process Additions/Updates (now with enriched data)
+        total_files = len(to_add_update)
+        for idx, movie in enumerate(to_add_update):
+            if idx % 100 == 0 or idx == total_files - 1:
+                update_sync_progress(db, subscription_id, SyncType.MOVIES, idx + 1, total_files, "Creating files")
             stream_id = int(movie['stream_id'])
             name = movie['name']
             ext = movie['container_extension']
             cat_id = movie['category_id']
             tmdb_id = movie.get('tmdb')  # Xtream API uses 'tmdb' not 'tmdb_id'
-
-            # PERFORMANCE OPTIMIZATION: Disabled for initial sync speed
-            # Fetching detailed info for every movie is too slow (2-4s per movie)
-            # NFOs will use metadata directly from get_vod_streams response
-            # If you need TMDB IDs, consider enabling this for incremental updates only
-            #
-            # if not tmdb_id or str(tmdb_id) in ['0', 'None', 'null', '']:
-            #     try:
-            #         detailed_info = await xc.get_vod_info(str(stream_id))
-            #         if detailed_info and 'info' in detailed_info:
-            #             fetched_tmdb = detailed_info['info'].get('tmdb_id')
-            #             if fetched_tmdb:
-            #                 tmdb_id = fetched_tmdb
-            #                 movie['tmdb_id'] = tmdb_id
-            #     except Exception as e:
-            #         logger.warning(f"Failed to fetch detailed info for movie {stream_id}: {e}")
 
             cat_name = cat_map.get(cat_id, "Uncategorized")
             safe_cat = fm.sanitize_name(cat_name)
@@ -213,12 +272,18 @@ async def process_movies(db: Session, xc: XtreamClient, fm: FileManager, subscri
         sync_state.items_added = len(to_add_update)
         sync_state.items_deleted = len(to_delete)
         sync_state.status = SyncStatus.SUCCESS
+        sync_state.progress_current = 0
+        sync_state.progress_total = 0
+        sync_state.progress_phase = None
         db.commit()
 
     except Exception as e:
         logger.exception("Error syncing movies")
         sync_state.status = SyncStatus.FAILED
         sync_state.error_message = str(e)
+        sync_state.progress_current = 0
+        sync_state.progress_total = 0
+        sync_state.progress_phase = None
         db.commit()
         raise
 
@@ -300,7 +365,10 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
             db.delete(series)
 
         # Additions/Updates
-        for series in to_add_update:
+        total_series = len(to_add_update)
+        for idx, series in enumerate(to_add_update):
+            if idx % 10 == 0 or idx == total_series - 1:
+                update_sync_progress(db, subscription_id, SyncType.SERIES, idx + 1, total_series, "Processing series")
             series_id = int(series['series_id'])
             name = series['name']
             cat_id = series['category_id']
@@ -436,12 +504,18 @@ async def process_series(db: Session, xc: XtreamClient, fm: FileManager, subscri
         sync_state.items_added = len(to_add_update)
         sync_state.items_deleted = len(to_delete)
         sync_state.status = SyncStatus.SUCCESS
+        sync_state.progress_current = 0
+        sync_state.progress_total = 0
+        sync_state.progress_phase = None
         db.commit()
 
     except Exception as e:
         logger.exception("Error syncing series")
         sync_state.status = SyncStatus.FAILED
         sync_state.error_message = str(e)
+        sync_state.progress_current = 0
+        sync_state.progress_total = 0
+        sync_state.progress_phase = None
         db.commit()
         raise
 

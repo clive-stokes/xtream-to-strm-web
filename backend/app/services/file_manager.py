@@ -196,6 +196,62 @@ class FileManager:
         elif cover:
             nfo += f'  <fanart><thumb>{cover}</thumb></fanart>\n'
 
+        # Add fileinfo/streamdetails if video or audio info available
+        video = movie_data.get('video', {})
+        audio = movie_data.get('audio', {})
+        bitrate = movie_data.get('bitrate')
+        duration_secs = movie_data.get('duration_secs')
+
+        if video or audio:
+            nfo += '  <fileinfo>\n    <streamdetails>\n'
+
+            if video:
+                nfo += '      <video>\n'
+                if video.get('codec_name'):
+                    nfo += f'        <codec>{self._escape_xml(video["codec_name"])}</codec>\n'
+                if video.get('width') and video.get('height'):
+                    nfo += f'        <width>{video["width"]}</width>\n'
+                    nfo += f'        <height>{video["height"]}</height>\n'
+                if video.get('display_aspect_ratio'):
+                    nfo += f'        <aspect>{self._escape_xml(video["display_aspect_ratio"])}</aspect>\n'
+                if duration_secs:
+                    try:
+                        nfo += f'        <durationinseconds>{int(float(duration_secs))}</durationinseconds>\n'
+                    except (ValueError, TypeError):
+                        pass
+                # Use video bit_rate if available, otherwise overall bitrate
+                video_bitrate = video.get('bit_rate')
+                if video_bitrate:
+                    try:
+                        # Convert from bps to kbps
+                        nfo += f'        <bitrate>{int(int(video_bitrate) / 1000)}</bitrate>\n'
+                    except (ValueError, TypeError):
+                        pass
+                elif bitrate:
+                    try:
+                        nfo += f'        <bitrate>{int(bitrate)}</bitrate>\n'
+                    except (ValueError, TypeError):
+                        pass
+                nfo += '      </video>\n'
+
+            if audio:
+                nfo += '      <audio>\n'
+                if audio.get('codec_name'):
+                    nfo += f'        <codec>{self._escape_xml(audio["codec_name"])}</codec>\n'
+                if audio.get('channels'):
+                    nfo += f'        <channels>{audio["channels"]}</channels>\n'
+                if audio.get('sample_rate'):
+                    nfo += f'        <samplerate>{audio["sample_rate"]}</samplerate>\n'
+                if audio.get('channel_layout'):
+                    nfo += f'        <layout>{self._escape_xml(audio["channel_layout"])}</layout>\n'
+                # Try to get language from tags
+                audio_tags = audio.get('tags', {})
+                if audio_tags.get('language'):
+                    nfo += f'        <language>{self._escape_xml(audio_tags["language"])}</language>\n'
+                nfo += '      </audio>\n'
+
+            nfo += '    </streamdetails>\n  </fileinfo>\n'
+
         nfo += '</movie>'
         return nfo
 

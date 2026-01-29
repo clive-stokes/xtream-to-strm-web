@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Start Redis server in the background
-redis-server --daemonize yes
+# Start Redis server in the background (non-root compatible)
+redis-server --daemonize yes --dir /app --dbfilename dump.rdb
 
 # Wait for Redis to be ready
 sleep 2

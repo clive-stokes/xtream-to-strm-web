@@ -39,6 +39,10 @@ class SyncStatusResponse(BaseModel):
     items_added: int
     items_deleted: int
     error_message: Optional[str] = None
+    # Progress tracking
+    progress_current: int = 0
+    progress_total: int = 0
+    progress_phase: Optional[str] = None
 
 class M3USyncStatusResponse(BaseModel):
     id: Optional[int] = None

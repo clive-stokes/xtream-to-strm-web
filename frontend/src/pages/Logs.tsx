@@ -32,6 +32,14 @@ export default function Logs() {
 
     const connectToLogs = () => {
         const token = localStorage.getItem('token');
+
+        // Don't connect if no token (not logged in)
+        if (!token) {
+            console.log('No auth token found, retrying in 2 seconds...');
+            setTimeout(connectToLogs, 2000);
+            return;
+        }
+
         const es = new EventSource(`/api/v1/logs/stream?token=${token}`);
 
         es.onopen = () => {

@@ -10,7 +10,7 @@ router = APIRouter()
 
 async def log_stream() -> AsyncGenerator[str, None]:
     """Stream logs from app.log file"""
-    log_file = "app.log"
+    log_file = "/db/app.log"
     
     # Create file if it doesn't exist
     if not os.path.exists(log_file):

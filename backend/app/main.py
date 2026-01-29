@@ -8,6 +8,18 @@ from app.db.base import Base
 from app.db.session import engine
 import os
 import logging
+import sys
+
+# Configure logging to file and stdout
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(
+    level=logging.INFO,
+    format=log_format,
+    handlers=[
+        logging.FileHandler("/db/app.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 # Suppress verbose httpx logging (HTTP Request, 301 Moved Permanently, etc.)
 logging.getLogger("httpx").setLevel(logging.WARNING)

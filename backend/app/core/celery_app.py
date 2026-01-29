@@ -1,6 +1,18 @@
 from celery import Celery
 from app.core.config import settings
 import logging
+import sys
+
+# Configure logging to file and stdout for Celery worker
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(
+    level=logging.INFO,
+    format=log_format,
+    handlers=[
+        logging.FileHandler("/db/app.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 # Suppress verbose httpx logging (HTTP Request, 301 Moved Permanently, etc.)
 logging.getLogger("httpx").setLevel(logging.WARNING)

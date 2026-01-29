@@ -8,10 +8,10 @@ redis-server --daemonize yes --dir /app --dbfilename dump.rdb
 sleep 2
 
 # Start Celery worker in the background
-celery -A app.core.celery_app worker --loglevel=info 2>&1 | tee -a app.log &
+celery -A app.core.celery_app worker --loglevel=info 2>&1 | tee -a /db/app.log &
 
 # Start Celery Beat in the background
-celery -A app.core.celery_app beat --loglevel=info 2>&1 | tee -a app.log &
+celery -A app.core.celery_app beat --loglevel=info 2>&1 | tee -a /db/app.log &
 
 # Start the FastAPI application
-uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a app.log
+uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /db/app.log
